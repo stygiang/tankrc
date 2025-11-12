@@ -25,8 +25,19 @@ Settings survive power cycles via the on-board NVS/Preferences store, and you ca
 The built-in six-channel receiver driver interprets standard 1–2 ms PWM signals:
 - **CH1** → steering (turn command, -1.0 to 1.0)
 - **CH2** → throttle (drive command, -1.0 to 1.0)
-- **CH3** → momentary/aux button (currently toggles lighting)
+- **CH3** → 3-position aux (up = hazard flashers, middle = lights off, down = lights on)
 - **CH4** → 3-way switch mapped to `Debug`, `Active`, and `Locked` drive modes
-- **CH5/CH6** → reserved for upcoming ultrasonic sensor control (values exposed to the app for future logic)
+- **CH5/CH6** → ultrasonic sensor readings (0–1 normalized distance) that tint the headlights green→yellow→red as obstacles approach
 
 All receiver pins can be reassigned from the serial wizard, so feel free to wire them wherever it's convenient on your ESP32.
+
+## PCA9685 lighting system
+Four RGB assemblies (front-left/right headlights and rear-left/right reverse lights) connect through a PCA9685 PWM expander—each color component maps to its own channel. The lighting controller handles:
+- **Mode colors:** Debug, Active, and Locked each broadcast a distinct color palette so status is visible at a glance.
+- **Auto turn signals:** Steering left/right past a threshold starts a timed amber blink on the corresponding side.
+- **Reverse lights:** Rear lights flip to bright white automatically while backing up.
+- **Hazard mode:** CH3 up (or a configured sensor fault) triggers a double-blink pattern on both turn signals + rear lights.
+- **Connectivity blink codes:** Wi-Fi, RC link, and Bluetooth each trigger their own chase pattern so you can tell which link dropped.
+- **Sensor tinting:** CH5/CH6 (ultrasonic) modulate the headlight color from green (clear) to red (danger) as obstacles get closer.
+
+Address, frequency, RGB channel assignments, and blink behaviors are all editable from the serial wizard so you can match whatever wiring layout you prefer.

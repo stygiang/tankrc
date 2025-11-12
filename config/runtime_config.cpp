@@ -22,6 +22,17 @@ RuntimeConfig makeDefaultConfig() {
     config.features.soundEnabled = true;
     config.features.sensorsEnabled = true;
 
+    config.lighting.pcaAddress = 0x40;
+    config.lighting.pwmFrequency = 800;
+    config.lighting.channels.frontLeft = {0, 1, 2};
+    config.lighting.channels.frontRight = {3, 4, 5};
+    config.lighting.channels.rearLeft = {6, 7, 8};
+    config.lighting.channels.rearRight = {9, 10, 11};
+    config.lighting.blink.periodMs = 450;
+    config.lighting.blink.wifi = true;
+    config.lighting.blink.rc = true;
+    config.lighting.blink.bt = true;
+
     config.rc.channelPins[0] = Pins::RC_CH1;
     config.rc.channelPins[1] = Pins::RC_CH2;
     config.rc.channelPins[2] = Pins::RC_CH3;

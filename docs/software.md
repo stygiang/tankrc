@@ -4,7 +4,7 @@
 2. **Drivers (`drivers/`)** expose hardware features (e.g., TB6612FNG dual-motor driver with ramped outputs, RC receiver pulse capture, battery monitor) behind clean C++ interfaces.
 3. **Control (`control/`)** implements motion logic and shared control algorithms.
 4. **Comms (`comms/`)** handles radio/telemetry links—the default `RadioLink` now translates RC receiver channels into throttle/steering, mode (Debug/Active/Locked), and auxiliary button states.
-5. **Features (`features/`)** hold user-facing modules such as lighting and sound.
+5. **Features (`features/`)** hold user-facing modules such as lighting and sound. The lighting stack consumes the PCA9685 driver, auto-manages headlights/turn signals/reverse lamps, hazards, connectivity chase patterns, and ultrasonic-based color gradients.
 6. **Config (`config/`)** centralizes tunables like pins, PID gains, and safety limits, and now includes `runtime_config` for user-editable pin maps.
 7. **Storage/UI (`storage/`, `ui/`)** provide persistence via ESP32 Preferences and a serial console wizard for configuring/testing the RC platform in the field.
 

@@ -35,10 +35,15 @@ CommandPacket RadioLink::poll() {
 
     packet.drive.turn = clampRange(frame.normalized[0]);
     packet.drive.throttle = clampRange(frame.normalized[1]);
-    packet.auxButton = frame.normalized[2] > 0.25F;
+    const float ch3 = frame.normalized[2];
+    packet.auxButton = ch3 > 0.35F;
+    packet.hazard = ch3 < -0.35F;
     packet.status = modeFromChannel(frame.normalized[3]);
-    packet.auxChannel5 = toZeroOne(frame.normalized[4]);
-    packet.auxChannel6 = toZeroOne(frame.normalized[5]);
+    packet.auxChannel5 = frame.widths[4] > 0 ? toZeroOne(frame.normalized[4]) : 1.0F;
+    packet.auxChannel6 = frame.widths[5] > 0 ? toZeroOne(frame.normalized[5]) : 1.0F;
+    packet.rcLinked = (frame.widths[0] > 0 || frame.widths[1] > 0);
+    packet.wifiConnected = true;
+    packet.btConnected = true;
 
     // Simple defaults: aux button toggles lighting, sound follows mode.
     packet.lightingState = packet.auxButton;

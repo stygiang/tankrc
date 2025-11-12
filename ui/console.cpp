@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <cstdint>
 
 #include "comms/radio_link.h"
 #include "control/drive_controller.h"
@@ -108,6 +109,21 @@ void showConfig() {
         Serial.printf("CH%u pin: %d\n", static_cast<unsigned>(i + 1), ctx_.config->rc.channelPins[i]);
     }
 
+    Serial.println(F("--- Lighting ---"));
+    Serial.printf("PCA9685 addr: 0x%02X, freq: %u Hz\n", ctx_.config->lighting.pcaAddress, ctx_.config->lighting.pwmFrequency);
+    auto printRgb = [](const char* name, const Config::RgbChannel& rgb) {
+        Serial.printf("%s -> R:%d G:%d B:%d\n", name, rgb.r, rgb.g, rgb.b);
+    };
+    printRgb("Front Left", ctx_.config->lighting.channels.frontLeft);
+    printRgb("Front Right", ctx_.config->lighting.channels.frontRight);
+    printRgb("Rear Left", ctx_.config->lighting.channels.rearLeft);
+    printRgb("Rear Right", ctx_.config->lighting.channels.rearRight);
+    Serial.printf("Blink wifi:%s rc:%s bt:%s period:%ums\n",
+                  ctx_.config->lighting.blink.wifi ? "on" : "off",
+                  ctx_.config->lighting.blink.rc ? "on" : "off",
+                  ctx_.config->lighting.blink.bt ? "on" : "off",
+                  ctx_.config->lighting.blink.periodMs);
+
     Serial.println(F("--- Feature Flags ---"));
     Serial.printf("Lighting enabled: %s\n", features.lightingEnabled ? "yes" : "no");
     Serial.printf("Sound enabled: %s\n", features.soundEnabled ? "yes" : "no");
@@ -120,6 +136,13 @@ void configureChannel(const char* label, Config::ChannelPins& pins) {
     pins.pwm = promptInt("  PWM", pins.pwm);
     pins.in1 = promptInt("  IN1", pins.in1);
     pins.in2 = promptInt("  IN2", pins.in2);
+}
+
+void configureRgbChannel(const char* label, Config::RgbChannel& rgb) {
+    Serial.println(label);
+    rgb.r = promptInt("  Red channel", rgb.r);
+    rgb.g = promptInt("  Green channel", rgb.g);
+    rgb.b = promptInt("  Blue channel", rgb.b);
 }
 
 void configureRcPins(Config::RcConfig& rc) {
@@ -136,6 +159,26 @@ void configureRcPins(Config::RcConfig& rc) {
     for (std::size_t i = 0; i < Drivers::RcReceiver::kChannelCount; ++i) {
         rc.channelPins[i] = promptInt(labels[i], rc.channelPins[i]);
     }
+}
+
+void configureLighting(Config::LightingConfig& lighting) {
+    Serial.println(F("PCA9685 lighting setup:"));
+    int addr = promptInt("  I2C address (decimal, 64 = 0x40)", lighting.pcaAddress);
+    if (addr >= 0 && addr <= 127) {
+        lighting.pcaAddress = static_cast<std::uint8_t>(addr);
+    }
+    int freq = promptInt("  PWM frequency (Hz)", lighting.pwmFrequency);
+    if (freq > 0) {
+        lighting.pwmFrequency = static_cast<std::uint16_t>(freq);
+    }
+    configureRgbChannel("Front left RGB channels", lighting.channels.frontLeft);
+    configureRgbChannel("Front right RGB channels", lighting.channels.frontRight);
+    configureRgbChannel("Rear left RGB channels", lighting.channels.rearLeft);
+    configureRgbChannel("Rear right RGB channels", lighting.channels.rearRight);
+    lighting.blink.wifi = promptBool("Blink when WiFi disconnected", lighting.blink.wifi);
+    lighting.blink.rc = promptBool("Blink when RC link lost", lighting.blink.rc);
+    lighting.blink.bt = promptBool("Blink when Bluetooth disconnected", lighting.blink.bt);
+    lighting.blink.periodMs = static_cast<std::uint16_t>(promptInt("Blink period (ms)", lighting.blink.periodMs));
 }
 
 void runPinWizard() {
@@ -162,6 +205,7 @@ void runPinWizard() {
     temp.pins.speaker = promptInt("Speaker pin", temp.pins.speaker);
     temp.pins.batterySense = promptInt("Battery sense pin", temp.pins.batterySense);
     configureRcPins(temp.rc);
+    configureLighting(temp.lighting);
 
     const bool apply = promptBool("Apply these changes?", true);
     if (apply) {
@@ -244,10 +288,18 @@ void runLightingTest() {
         return;
     }
     Serial.println(F("Blinking light bar (6 cycles)."));
+    Features::LightingInput input{};
+    input.wifiConnected = true;
+    input.rcConnected = true;
+    input.btConnected = true;
+    input.ultrasonicLeft = 0.4F;
+    input.ultrasonicRight = 0.9F;
     for (int i = 0; i < 6; ++i) {
-        ctx_.lighting->update(true);
+        input.steering = 0.8F;
+        ctx_.lighting->update(input);
         delay(200);
-        ctx_.lighting->update(false);
+        input.steering = -0.8F;
+        ctx_.lighting->update(input);
         delay(200);
     }
     Serial.println(F("Lighting test complete."));

@@ -18,9 +18,13 @@ struct CommandPacket {
     bool lightingState = false;
     bool soundState = false;
     bool auxButton = false;
+    bool hazard = false;
     RcStatusMode status = RcStatusMode::Active;
     float auxChannel5 = 0.0F;
     float auxChannel6 = 0.0F;
+    bool rcLinked = true;
+    bool wifiConnected = true;
+    bool btConnected = true;
 };
 
 class RadioLink {

@@ -33,6 +33,33 @@ struct FeatureConfig {
     bool sensorsEnabled = true;
 };
 
+struct RgbChannel {
+    int r = -1;
+    int g = -1;
+    int b = -1;
+};
+
+struct LightingChannelMap {
+    RgbChannel frontLeft{};
+    RgbChannel frontRight{};
+    RgbChannel rearLeft{};
+    RgbChannel rearRight{};
+};
+
+struct LightingBlinkConfig {
+    bool wifi = true;
+    bool rc = true;
+    bool bt = true;
+    std::uint16_t periodMs = 500;
+};
+
+struct LightingConfig {
+    std::uint8_t pcaAddress = 0x40;
+    std::uint16_t pwmFrequency = 800;
+    LightingChannelMap channels{};
+    LightingBlinkConfig blink{};
+};
+
 struct RcConfig {
     int channelPins[6]{-1, -1, -1, -1, -1, -1};
 };
@@ -41,6 +68,7 @@ struct RuntimeConfig {
     std::uint32_t version = kConfigVersion;
     PinAssignments pins{};
     FeatureConfig features{};
+    LightingConfig lighting{};
     RcConfig rc{};
 };
 

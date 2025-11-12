@@ -54,16 +54,32 @@ void loop() {
     driveController.update();
 
     const bool outputsEnabled = packet.status != Comms::RcStatusMode::Locked;
-    lighting.update(outputsEnabled && packet.lightingState);
+
+    Features::LightingInput lightingInput{};
+    lightingInput.steering = driveCommand.turn;
+    lightingInput.throttle = driveCommand.throttle;
+    lightingInput.rcConnected = packet.rcLinked;
+    lightingInput.wifiConnected = packet.wifiConnected;
+    lightingInput.btConnected = packet.btConnected;
+    lightingInput.status = packet.status;
+    lightingInput.hazard = packet.hazard;
+    lightingInput.ultrasonicLeft = packet.auxChannel5;
+    lightingInput.ultrasonicRight = packet.auxChannel6;
+
+    const bool lightingInstalled = runtimeConfig.features.lightingEnabled;
+    const bool hazardActive = lightingInstalled && packet.hazard;
+    const bool lightEnable = lightingInstalled && outputsEnabled && packet.lightingState;
+    lighting.setFeatureEnabled(lightEnable || hazardActive);
+    lighting.update(lightingInput);
+
     sound.update(outputsEnabled && packet.soundState);
     Core::serviceWatchdog();
 }
 
 void applyRuntimeConfig() {
     driveController.begin(runtimeConfig);
-    lighting.begin(runtimeConfig.pins.lightBar);
+    lighting.begin(runtimeConfig);
     lighting.setFeatureEnabled(runtimeConfig.features.lightingEnabled);
-    lighting.update(false);
 
     sound.begin(runtimeConfig.pins.speaker);
     sound.setFeatureEnabled(runtimeConfig.features.soundEnabled);
