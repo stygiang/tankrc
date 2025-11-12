@@ -1,0 +1,410 @@
+#include <Arduino.h>
+
+#include "comms/radio_link.h"
+#include "control/drive_controller.h"
+#include "features/lighting.h"
+#include "features/sound_fx.h"
+#include "ui/console.h"
+
+namespace TankRC::UI {
+namespace {
+Context ctx_{};
+ApplyConfigCallback applyCallback_ = nullptr;
+String inputBuffer_;
+bool promptShown_ = false;
+bool wizardActive_ = false;
+
+String readLineBlocking() {
+    String line;
+    while (true) {
+        while (Serial.available()) {
+            char c = static_cast<char>(Serial.read());
+            if (c == '\r') {
+                continue;
+            }
+            if (c == '\n') {
+                return line;
+            }
+            line += c;
+        }
+        delay(10);
+    }
+}
+
+int promptInt(const String& label, int current) {
+    Serial.print(label);
+    Serial.print(" [");
+    Serial.print(current);
+    Serial.print("] : ");
+    String line = readLineBlocking();
+    line.trim();
+    if (line.isEmpty()) {
+        return current;
+    }
+    return line.toInt();
+}
+
+bool promptBool(const String& label, bool current) {
+    Serial.print(label);
+    Serial.print(" [");
+    Serial.print(current ? "Y" : "N");
+    Serial.print("] : ");
+
+    while (true) {
+        String line = readLineBlocking();
+        line.trim();
+        line.toLowerCase();
+        if (line.isEmpty()) {
+            return current;
+        }
+        if (line == "y" || line == "yes" || line == "1" || line == "true") {
+            return true;
+        }
+        if (line == "n" || line == "no" || line == "0" || line == "false") {
+            return false;
+        }
+        Serial.print("Please type y/n: ");
+    }
+}
+
+void showHelp() {
+    Serial.println();
+    Serial.println(F("=== TankRC Serial Console ==="));
+    Serial.println(F("Commands:"));
+    Serial.println(F("  help            - Show this list"));
+    Serial.println(F("  show            - Dump current configuration"));
+    Serial.println(F("  wizard pins     - Interactive pin assignment wizard"));
+    Serial.println(F("  wizard features - Enable/disable feature modules"));
+    Serial.println(F("  wizard test     - Launch interactive test suite"));
+    Serial.println(F("  save            - Persist current settings to flash"));
+    Serial.println(F("  load            - Reload last saved settings"));
+    Serial.println(F("  defaults        - Restore factory defaults"));
+    Serial.println(F("  reset           - Clear saved settings from flash"));
+    Serial.println();
+}
+
+void showConfig() {
+    if (!ctx_.config) {
+        Serial.println(F("No config available."));
+        return;
+    }
+
+    const auto& pins = ctx_.config->pins;
+    const auto& features = ctx_.config->features;
+    Serial.println(F("--- Pin Assignments ---"));
+    Serial.printf("Left Motor A (PWM,IN1,IN2): %d, %d, %d\n", pins.leftDriver.motorA.pwm, pins.leftDriver.motorA.in1, pins.leftDriver.motorA.in2);
+    Serial.printf("Left Motor B (PWM,IN1,IN2): %d, %d, %d\n", pins.leftDriver.motorB.pwm, pins.leftDriver.motorB.in1, pins.leftDriver.motorB.in2);
+    Serial.printf("Left Driver STBY: %d\n", pins.leftDriver.standby);
+    Serial.printf("Right Motor A (PWM,IN1,IN2): %d, %d, %d\n", pins.rightDriver.motorA.pwm, pins.rightDriver.motorA.in1, pins.rightDriver.motorA.in2);
+    Serial.printf("Right Motor B (PWM,IN1,IN2): %d, %d, %d\n", pins.rightDriver.motorB.pwm, pins.rightDriver.motorB.in1, pins.rightDriver.motorB.in2);
+    Serial.printf("Right Driver STBY: %d\n", pins.rightDriver.standby);
+    Serial.printf("Light bar pin: %d\n", pins.lightBar);
+    Serial.printf("Speaker pin: %d\n", pins.speaker);
+    Serial.printf("Battery sense pin: %d\n", pins.batterySense);
+
+    Serial.println(F("--- Feature Flags ---"));
+    Serial.printf("Lighting enabled: %s\n", features.lightingEnabled ? "yes" : "no");
+    Serial.printf("Sound enabled: %s\n", features.soundEnabled ? "yes" : "no");
+    Serial.printf("Sensors enabled: %s\n", features.sensorsEnabled ? "yes" : "no");
+    Serial.println();
+}
+
+void configureChannel(const char* label, Config::ChannelPins& pins) {
+    Serial.println(label);
+    pins.pwm = promptInt("  PWM", pins.pwm);
+    pins.in1 = promptInt("  IN1", pins.in1);
+    pins.in2 = promptInt("  IN2", pins.in2);
+}
+
+void runPinWizard() {
+    if (!ctx_.config) {
+        Serial.println(F("Config not initialized."));
+        return;
+    }
+
+    wizardActive_ = true;
+    inputBuffer_.clear();
+
+    Config::RuntimeConfig temp = *ctx_.config;
+    Serial.println(F("Pin assignment wizard. Press Enter to keep the current value."));
+
+    configureChannel("Left Driver Motor A", temp.pins.leftDriver.motorA);
+    configureChannel("Left Driver Motor B", temp.pins.leftDriver.motorB);
+    temp.pins.leftDriver.standby = promptInt("Left driver STBY", temp.pins.leftDriver.standby);
+
+    configureChannel("Right Driver Motor A", temp.pins.rightDriver.motorA);
+    configureChannel("Right Driver Motor B", temp.pins.rightDriver.motorB);
+    temp.pins.rightDriver.standby = promptInt("Right driver STBY", temp.pins.rightDriver.standby);
+
+    temp.pins.lightBar = promptInt("Light bar pin", temp.pins.lightBar);
+    temp.pins.speaker = promptInt("Speaker pin", temp.pins.speaker);
+    temp.pins.batterySense = promptInt("Battery sense pin", temp.pins.batterySense);
+
+    const bool apply = promptBool("Apply these changes?", true);
+    if (apply) {
+        *ctx_.config = temp;
+        if (applyCallback_) {
+            applyCallback_();
+        }
+        Serial.println(F("Pins updated. Run 'save' to persist to flash."));
+    } else {
+        Serial.println(F("Pin changes discarded."));
+    }
+
+    wizardActive_ = false;
+}
+
+void runFeatureWizard() {
+    if (!ctx_.config) {
+        Serial.println(F("Config not initialized."));
+        return;
+    }
+
+    wizardActive_ = true;
+    inputBuffer_.clear();
+
+    Config::FeatureConfig features = ctx_.config->features;
+    Serial.println(F("Feature configuration. Press Enter to keep the current setting."));
+
+    features.lightingEnabled = promptBool("Lighting enabled", features.lightingEnabled);
+    features.soundEnabled = promptBool("Sound enabled", features.soundEnabled);
+    features.sensorsEnabled = promptBool("Sensors enabled", features.sensorsEnabled);
+
+    const bool apply = promptBool("Apply these changes?", true);
+    if (apply) {
+        ctx_.config->features = features;
+        if (applyCallback_) {
+            applyCallback_();
+        }
+        Serial.println(F("Feature settings updated. Run 'save' to persist."));
+    } else {
+        Serial.println(F("Feature changes discarded."));
+    }
+
+    wizardActive_ = false;
+}
+
+void performDrivePulse(float throttle, float turn, unsigned long durationMs, const char* label) {
+    if (!ctx_.drive) {
+        Serial.println(F("Drive controller unavailable."));
+        return;
+    }
+
+    Serial.println(label);
+    Comms::DriveCommand cmd;
+    cmd.throttle = throttle;
+    cmd.turn = turn;
+    const unsigned long end = millis() + durationMs;
+    while (millis() < end) {
+        ctx_.drive->setCommand(cmd);
+        ctx_.drive->update();
+        delay(25);
+    }
+    cmd.throttle = 0.0F;
+    cmd.turn = 0.0F;
+    ctx_.drive->setCommand(cmd);
+    ctx_.drive->update();
+}
+
+void runMotorTest() {
+    Serial.println(F("Motor test starting. Tracks will spin forward/back and pivot."));
+    performDrivePulse(0.5F, 0.0F, 1500, "Forward");
+    performDrivePulse(-0.5F, 0.0F, 1500, "Reverse");
+    performDrivePulse(0.0F, 0.6F, 1200, "Pivot right");
+    performDrivePulse(0.0F, -0.6F, 1200, "Pivot left");
+    Serial.println(F("Motor test complete."));
+}
+
+void runLightingTest() {
+    if (!ctx_.lighting) {
+        Serial.println(F("Lighting controller unavailable."));
+        return;
+    }
+    Serial.println(F("Blinking light bar (6 cycles)."));
+    for (int i = 0; i < 6; ++i) {
+        ctx_.lighting->update(true);
+        delay(200);
+        ctx_.lighting->update(false);
+        delay(200);
+    }
+    Serial.println(F("Lighting test complete."));
+}
+
+void runSoundTest() {
+    if (!ctx_.sound) {
+        Serial.println(F("Sound controller unavailable."));
+        return;
+    }
+    Serial.println(F("Pulsing sound output."));
+    for (int i = 0; i < 5; ++i) {
+        ctx_.sound->update(true);
+        delay(150);
+        ctx_.sound->update(false);
+        delay(150);
+    }
+    Serial.println(F("Sound test complete."));
+}
+
+void runBatteryTest() {
+    if (!ctx_.drive) {
+        Serial.println(F("Drive controller unavailable."));
+        return;
+    }
+    const float voltage = ctx_.drive->readBatteryVoltage();
+    Serial.print(F("Battery voltage: "));
+    Serial.print(voltage, 2);
+    Serial.println(F(" V"));
+}
+
+void runTestWizard() {
+    wizardActive_ = true;
+    inputBuffer_.clear();
+
+    bool done = false;
+    while (!done) {
+        Serial.println();
+        Serial.println(F("=== Test Wizard ==="));
+        Serial.println(F("1) Tank drive sweep"));
+        Serial.println(F("2) Lighting blink"));
+        Serial.println(F("3) Sound pulse"));
+        Serial.println(F("4) Battery voltage read"));
+        Serial.println(F("0) Exit test wizard"));
+        const int choice = promptInt("Select option", 0);
+        switch (choice) {
+            case 1:
+                runMotorTest();
+                break;
+            case 2:
+                runLightingTest();
+                break;
+            case 3:
+                runSoundTest();
+                break;
+            case 4:
+                runBatteryTest();
+                break;
+            case 0:
+                done = true;
+                break;
+            default:
+                Serial.println(F("Unknown selection."));
+                break;
+        }
+    }
+
+    wizardActive_ = false;
+}
+
+void handleCommand(String line) {
+    line.trim();
+    if (line.isEmpty()) {
+        return;
+    }
+
+    String lower = line;
+    lower.toLowerCase();
+
+    if (lower == "help" || lower == "menu") {
+        showHelp();
+        return;
+    }
+    if (lower == "show") {
+        showConfig();
+        return;
+    }
+    if (lower == "wizard pins") {
+        runPinWizard();
+        return;
+    }
+    if (lower == "wizard features") {
+        runFeatureWizard();
+        return;
+    }
+    if (lower == "wizard test") {
+        runTestWizard();
+        return;
+    }
+    if (lower == "save") {
+        if (ctx_.store && ctx_.config && ctx_.store->save(*ctx_.config)) {
+            Serial.println(F("Settings saved."));
+        } else {
+            Serial.println(F("Failed to save settings."));
+        }
+        return;
+    }
+    if (lower == "load") {
+        if (ctx_.store && ctx_.config) {
+            if (ctx_.store->load(*ctx_.config)) {
+                Serial.println(F("Settings loaded."));
+            } else {
+                Serial.println(F("Loaded defaults (no saved data)."));
+            }
+            if (applyCallback_) {
+                applyCallback_();
+            }
+        } else {
+            Serial.println(F("Storage unavailable."));
+        }
+        return;
+    }
+    if (lower == "defaults") {
+        if (ctx_.config) {
+            *ctx_.config = Config::makeDefaultConfig();
+            if (applyCallback_) {
+                applyCallback_();
+            }
+            Serial.println(F("Restored defaults. Run 'save' to persist."));
+        } else {
+            Serial.println(F("Config unavailable."));
+        }
+        return;
+    }
+    if (lower == "reset") {
+        if (ctx_.store) {
+            ctx_.store->reset();
+            Serial.println(F("Cleared saved settings."));
+        }
+        return;
+    }
+
+    Serial.print(F("Unknown command: "));
+    Serial.println(line);
+    Serial.println(F("Type 'help' to see available commands."));
+}
+}  // namespace
+
+void begin(const Context& ctx, ApplyConfigCallback applyCallback) {
+    ctx_ = ctx;
+    applyCallback_ = applyCallback;
+    promptShown_ = false;
+    inputBuffer_.clear();
+}
+
+void update() {
+    if (!promptShown_) {
+        Serial.println();
+        Serial.println(F("[TankRC] Serial console ready. Type 'help' for commands."));
+        Serial.print(F("> "));
+        promptShown_ = true;
+    }
+
+    while (Serial.available()) {
+        char c = static_cast<char>(Serial.read());
+        if (c == '\r') {
+            continue;
+        }
+        if (c == '\n') {
+            String line = inputBuffer_;
+            inputBuffer_.clear();
+            handleCommand(line);
+            Serial.print(F("> "));
+        } else {
+            inputBuffer_ += c;
+        }
+    }
+}
+
+bool isWizardActive() {
+    return wizardActive_;
+}
+}  // namespace TankRC::UI
