@@ -71,15 +71,15 @@ void showHelp() {
     Serial.println();
     Serial.println(F("=== TankRC Serial Console ==="));
     Serial.println(F("Commands:"));
-    Serial.println(F("  help            - Show this list"));
-    Serial.println(F("  show            - Dump current configuration"));
-    Serial.println(F("  wizard pins     - Interactive pin assignment wizard"));
-    Serial.println(F("  wizard features - Enable/disable feature modules"));
-    Serial.println(F("  wizard test     - Launch interactive test suite"));
-    Serial.println(F("  save            - Persist current settings to flash"));
-    Serial.println(F("  load            - Reload last saved settings"));
-    Serial.println(F("  defaults        - Restore factory defaults"));
-    Serial.println(F("  reset           - Clear saved settings from flash"));
+    Serial.println(F("  help (h, ?)     - Show this list"));
+    Serial.println(F("  show (s)        - Dump current configuration"));
+    Serial.println(F("  wizard pins (wp)- Interactive pin assignment wizard"));
+    Serial.println(F("  wizard features (wf) - Enable/disable feature modules"));
+    Serial.println(F("  wizard test (wt)- Launch interactive test suite"));
+    Serial.println(F("  save (sv)       - Persist current settings to flash"));
+    Serial.println(F("  load (ld)       - Reload last saved settings"));
+    Serial.println(F("  defaults (df)   - Restore factory defaults"));
+    Serial.println(F("  reset (rs)      - Clear saved settings from flash"));
     Serial.println();
 }
 
@@ -298,33 +298,34 @@ void runTestWizard() {
 void handleCommand(String line) {
     line.trim();
     if (line.isEmpty()) {
+        showHelp();
         return;
     }
 
     String lower = line;
     lower.toLowerCase();
 
-    if (lower == "help" || lower == "menu") {
+    if (lower == "help" || lower == "menu" || lower == "h" || lower == "?") {
         showHelp();
         return;
     }
-    if (lower == "show") {
+    if (lower == "show" || lower == "s") {
         showConfig();
         return;
     }
-    if (lower == "wizard pins") {
+    if (lower == "wizard pins" || lower == "wp" || lower == "pins") {
         runPinWizard();
         return;
     }
-    if (lower == "wizard features") {
+    if (lower == "wizard features" || lower == "wf" || lower == "features") {
         runFeatureWizard();
         return;
     }
-    if (lower == "wizard test") {
+    if (lower == "wizard test" || lower == "wt" || lower == "test") {
         runTestWizard();
         return;
     }
-    if (lower == "save") {
+    if (lower == "save" || lower == "sv") {
         if (ctx_.store && ctx_.config && ctx_.store->save(*ctx_.config)) {
             Serial.println(F("Settings saved."));
         } else {
@@ -332,7 +333,7 @@ void handleCommand(String line) {
         }
         return;
     }
-    if (lower == "load") {
+    if (lower == "load" || lower == "ld") {
         if (ctx_.store && ctx_.config) {
             if (ctx_.store->load(*ctx_.config)) {
                 Serial.println(F("Settings loaded."));
@@ -347,7 +348,7 @@ void handleCommand(String line) {
         }
         return;
     }
-    if (lower == "defaults") {
+    if (lower == "defaults" || lower == "df") {
         if (ctx_.config) {
             *ctx_.config = Config::makeDefaultConfig();
             if (applyCallback_) {
@@ -359,7 +360,7 @@ void handleCommand(String line) {
         }
         return;
     }
-    if (lower == "reset") {
+    if (lower == "reset" || lower == "rs") {
         if (ctx_.store) {
             ctx_.store->reset();
             Serial.println(F("Cleared saved settings."));
