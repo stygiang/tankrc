@@ -2,6 +2,7 @@
 
 #include "comms/radio_link.h"
 #include "control/drive_controller.h"
+#include "drivers/rc_receiver.h"
 #include "features/lighting.h"
 #include "features/sound_fx.h"
 #include "ui/console.h"
@@ -102,6 +103,11 @@ void showConfig() {
     Serial.printf("Speaker pin: %d\n", pins.speaker);
     Serial.printf("Battery sense pin: %d\n", pins.batterySense);
 
+    Serial.println(F("--- RC Receiver Pins ---"));
+    for (std::size_t i = 0; i < Drivers::RcReceiver::kChannelCount; ++i) {
+        Serial.printf("CH%u pin: %d\n", static_cast<unsigned>(i + 1), ctx_.config->rc.channelPins[i]);
+    }
+
     Serial.println(F("--- Feature Flags ---"));
     Serial.printf("Lighting enabled: %s\n", features.lightingEnabled ? "yes" : "no");
     Serial.printf("Sound enabled: %s\n", features.soundEnabled ? "yes" : "no");
@@ -114,6 +120,22 @@ void configureChannel(const char* label, Config::ChannelPins& pins) {
     pins.pwm = promptInt("  PWM", pins.pwm);
     pins.in1 = promptInt("  IN1", pins.in1);
     pins.in2 = promptInt("  IN2", pins.in2);
+}
+
+void configureRcPins(Config::RcConfig& rc) {
+    static const char* const labels[Drivers::RcReceiver::kChannelCount] = {
+        "Channel 1 (steering)",
+        "Channel 2 (throttle)",
+        "Channel 3 (aux button)",
+        "Channel 4 (mode switch)",
+        "Channel 5 (ultrasonic A)",
+        "Channel 6 (ultrasonic B)",
+    };
+
+    Serial.println(F("RC receiver pins:"));
+    for (std::size_t i = 0; i < Drivers::RcReceiver::kChannelCount; ++i) {
+        rc.channelPins[i] = promptInt(labels[i], rc.channelPins[i]);
+    }
 }
 
 void runPinWizard() {
@@ -139,6 +161,7 @@ void runPinWizard() {
     temp.pins.lightBar = promptInt("Light bar pin", temp.pins.lightBar);
     temp.pins.speaker = promptInt("Speaker pin", temp.pins.speaker);
     temp.pins.batterySense = promptInt("Battery sense pin", temp.pins.batterySense);
+    configureRcPins(temp.rc);
 
     const bool apply = promptBool("Apply these changes?", true);
     if (apply) {

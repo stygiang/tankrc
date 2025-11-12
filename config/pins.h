@@ -19,6 +19,14 @@ constexpr int RIGHT_MOTOR2_IN1 = 12;
 constexpr int RIGHT_MOTOR2_IN2 = 13;
 constexpr int RIGHT_DRIVER_STBY = 23;
 
+// RC receiver channels (default wiring)
+constexpr int RC_CH1 = 35;  // steering
+constexpr int RC_CH2 = 34;  // throttle
+constexpr int RC_CH3 = 39;  // aux button
+constexpr int RC_CH4 = 36;  // 3-way switch
+constexpr int RC_CH5 = -1;  // reserved
+constexpr int RC_CH6 = -1;  // reserved
+
 constexpr int BATTERY_SENSE = 34;
 constexpr int IMU_SDA = 21;
 constexpr int IMU_SCL = 22;

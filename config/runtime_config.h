@@ -5,7 +5,7 @@
 #include <cstdint>
 
 namespace TankRC::Config {
-constexpr std::uint32_t kConfigVersion = 1;
+constexpr std::uint32_t kConfigVersion = 2;
 
 struct ChannelPins {
     int pwm = -1;
@@ -33,10 +33,15 @@ struct FeatureConfig {
     bool sensorsEnabled = true;
 };
 
+struct RcConfig {
+    int channelPins[6]{-1, -1, -1, -1, -1, -1};
+};
+
 struct RuntimeConfig {
     std::uint32_t version = kConfigVersion;
     PinAssignments pins{};
     FeatureConfig features{};
+    RcConfig rc{};
 };
 
 RuntimeConfig makeDefaultConfig();

@@ -22,6 +22,13 @@ RuntimeConfig makeDefaultConfig() {
     config.features.soundEnabled = true;
     config.features.sensorsEnabled = true;
 
+    config.rc.channelPins[0] = Pins::RC_CH1;
+    config.rc.channelPins[1] = Pins::RC_CH2;
+    config.rc.channelPins[2] = Pins::RC_CH3;
+    config.rc.channelPins[3] = Pins::RC_CH4;
+    config.rc.channelPins[4] = Pins::RC_CH5;
+    config.rc.channelPins[5] = Pins::RC_CH6;
+
     return config;
 }
 }  // namespace TankRC::Config

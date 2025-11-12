@@ -20,3 +20,13 @@ Open a serial monitor at 115200 baud and type `help` to launch the interactive w
 - Run the bundled test suite (`wizard test`) to sweep the tank drive, blink the light bar, pulse the speaker, and read battery voltage before heading into the field.
 
 Settings survive power cycles via the on-board NVS/Preferences store, and you can revert to defaults anytime with the `defaults` command.
+
+## RC receiver mapping
+The built-in six-channel receiver driver interprets standard 1–2 ms PWM signals:
+- **CH1** → steering (turn command, -1.0 to 1.0)
+- **CH2** → throttle (drive command, -1.0 to 1.0)
+- **CH3** → momentary/aux button (currently toggles lighting)
+- **CH4** → 3-way switch mapped to `Debug`, `Active`, and `Locked` drive modes
+- **CH5/CH6** → reserved for upcoming ultrasonic sensor control (values exposed to the app for future logic)
+
+All receiver pins can be reassigned from the serial wizard, so feel free to wire them wherever it's convenient on your ESP32.

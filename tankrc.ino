@@ -13,8 +13,6 @@ void applyRuntimeConfig();
 
 void setup() {
     Serial.begin(115200);
-    #hello
-
 
     Core::setupHardware();
     configStore.begin();
@@ -23,7 +21,6 @@ void setup() {
     }
 
     applyRuntimeConfig();
-    radio.begin();
 
     UI::Context uiContext{
         .config = &runtimeConfig,
@@ -43,12 +40,22 @@ void loop() {
         return;
     }
 
-    const auto command = radio.poll();
-    driveController.setCommand(command.drive);
+    const auto packet = radio.poll();
+    auto driveCommand = packet.drive;
+    if (packet.status == Comms::RcStatusMode::Locked) {
+        driveCommand.throttle = 0.0F;
+        driveCommand.turn = 0.0F;
+    } else if (packet.status == Comms::RcStatusMode::Debug) {
+        driveCommand.throttle *= 0.5F;
+        driveCommand.turn *= 0.5F;
+    }
 
+    driveController.setCommand(driveCommand);
     driveController.update();
-    lighting.update(command.lightingState);
-    sound.update(command.soundState);
+
+    const bool outputsEnabled = packet.status != Comms::RcStatusMode::Locked;
+    lighting.update(outputsEnabled && packet.lightingState);
+    sound.update(outputsEnabled && packet.soundState);
     Core::serviceWatchdog();
 }
 
@@ -61,4 +68,5 @@ void applyRuntimeConfig() {
     sound.begin(runtimeConfig.pins.speaker);
     sound.setFeatureEnabled(runtimeConfig.features.soundEnabled);
     sound.update(false);
+    radio.begin(runtimeConfig);
 }

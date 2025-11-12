@@ -9,6 +9,7 @@
 #include "control/pid.cpp"
 #include "drivers/motor_driver.cpp"
 #include "drivers/battery_monitor.cpp"
+#include "drivers/rc_receiver.cpp"
 #include "features/lighting.cpp"
 #include "features/sound_fx.cpp"
 #include "storage/config_store.cpp"
