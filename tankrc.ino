@@ -13,6 +13,8 @@ void applyRuntimeConfig();
 
 void setup() {
     Serial.begin(115200);
+    #hello
+
 
     Core::setupHardware();
     configStore.begin();
