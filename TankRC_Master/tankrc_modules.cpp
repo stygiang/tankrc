@@ -13,6 +13,7 @@
 #include "drivers/rc_receiver.cpp"
 #include "logging/session_logger.cpp"
 #include "network/control_server.cpp"
+#include "network/remote_console.cpp"
 #include "network/wifi_manager.cpp"
 #include "time/ntp_clock.cpp"
 #include "features/lighting.cpp"

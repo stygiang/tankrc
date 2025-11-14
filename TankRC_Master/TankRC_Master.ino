@@ -1,5 +1,9 @@
 #include "TankRC.h"
 
+#if TANKRC_ENABLE_NETWORK
+#include "network/remote_console.h"
+#endif
+
 #ifndef TANKRC_ENABLE_NETWORK
 #define TANKRC_ENABLE_NETWORK 0
 #endif
@@ -15,6 +19,7 @@ static Storage::ConfigStore configStore;
 #if TANKRC_ENABLE_NETWORK
 static Network::WifiManager wifiManager;
 static Network::ControlServer controlServer;
+static Network::RemoteConsole remoteConsole;
 static bool wifiInitialized = false;
 static Time::NtpClock ntpClock;
 static Logging::SessionLogger sessionLogger;
@@ -57,6 +62,8 @@ void setup() {
 #if TANKRC_ENABLE_NETWORK
     controlServer.begin(&wifiManager, &runtimeConfig, &configStore, applyRuntimeConfig, &sessionLogger);
     Serial.println(F("[BOOT] Control server online"));
+    remoteConsole.begin();
+    Serial.println(F("[BOOT] Remote console online (telnet 2323)"));
 #else
     Serial.println(F("[BOOT] Network stack disabled (TANKRC_ENABLE_NETWORK=0)"));
 #endif
@@ -67,6 +74,7 @@ void loop() {
     wifiManager.loop();
     ntpClock.update(wifiManager.isConnected());
     controlServer.loop();
+    remoteConsole.loop();
 #endif
     UI::update();
 

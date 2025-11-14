@@ -53,6 +53,7 @@ Once the ESP32 joins your Wi-Fi (or exposes its fallback `TankRC-Setup` access p
 - Default AP credentials: **SSID** `TankRC-Setup`, **password** `tankrc123`.
 - Pull NTP time for accurate timestamps and download session logs (`/api/logs?format=csv`) for tuning or debugging.
 - Back up or restore the entire runtime configuration via the dashboard (JSON export/import) to clone settings across vehicles.
+- Telnet into the remote console (`telnet <ip> 2323`) to run the exact same serial commands over Wi-Fi (requires `TANKRC_ENABLE_NETWORK=1`).
 
 Changes saved through the web interface persist via NVS and automatically reconfigure the firmware.
 
