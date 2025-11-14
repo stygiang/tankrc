@@ -3,9 +3,10 @@
 Modular ESP-based tank-style RC platform. This repo focuses on keeping each feature isolated in its own component so the project scales without turning into a monolithic sketch.
 
 ## Layout
-- `tankrc.ino` – Arduino IDE entry point that wires up the runtime configuration wizard (Wi-Fi/web stack is disabled by default; define `TANKRC_ENABLE_NETWORK=1` in `platformio.ini` or before including `TankRC.h` to turn it back on).
+- `TankRC_Master/TankRC_Master.ino` – Main ESP (master) sketch that wires up the runtime configuration wizard. Networking is disabled by default; define `TANKRC_ENABLE_NETWORK=1` before including `TankRC.h` (or via `platformio.ini`) to turn on Wi‑Fi/web control.
+- `TankRC_Slave/TankRC_Slave.ino` – Placeholder sketch for the secondary ESP. Drop in the logic you need once you're ready to bring up the second board.
 - `tankrc_modules.cpp` – Pulls in every module implementation so the Arduino build system compiles the deeper folder structure without extra setup.
-- `TankRC.h`, `config/`, `control/`, `drivers/`, `features/`, `network/`, `logging/`, `time/` – Core firmware organized by concern (living alongside the sketch so the Arduino IDE can find them).
+- `TankRC.h`, `config/`, `control/`, `drivers/`, `features/`, `network/`, `logging/`, `time/` – Shared firmware modules (now copied inside `TankRC_Master/` so the Arduino IDE can compile everything from a single sketch folder).
 - `docs/` – System and hardware notes.
 - `scripts/` – Helper scripts for building/flashing/testing.
 - `tests/` – Unit/integration tests and harness configs.
@@ -54,3 +55,12 @@ Once the ESP32 joins your Wi-Fi (or exposes its fallback `TankRC-Setup` access p
 - Back up or restore the entire runtime configuration via the dashboard (JSON export/import) to clone settings across vehicles.
 
 Changes saved through the web interface persist via NVS and automatically reconfigure the firmware.
+
+## Multiple ESP targets
+- **Master ESP**: Build/upload `TankRC_Master/TankRC_Master.ino` (or `pio run -e master`). This sketch drives the full RC stack.
+- **Slave ESP**: Use `TankRC_Slave/TankRC_Slave.ino` as the starting point for your second board. It currently contains empty `setup()/loop()` blocks so you can add behavior incrementally.
+- Shared modules live at the repository root (`TankRC.h`, `config/`, etc.), so both sketches can `#include "../../TankRC.h"` and reuse the same codebase.
+
+### Building
+- **PlatformIO**: `pio run -e master -t upload` (default) or `pio run -e slave -t upload` once the slave sketch is implemented.
+- **Arduino CLI/IDE**: Open the desired sketch folder (`TankRC_Master/` or `TankRC_Slave/`). With the helper script you can run `SKETCH=master ./scripts/build_and_flash.sh /dev/ttyUSB0` (or `SKETCH=slave ...`) to target a specific board.

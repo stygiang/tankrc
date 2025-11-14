@@ -27,7 +27,7 @@ void applyRuntimeConfig();
 
 void setup() {
     Serial.begin(115200);
-    Serial.println(F("[BOOT] TankRC starting..."));
+    Serial.println(F("[BOOT] TankRC (master) starting..."));
 
     Core::setupHardware();
     Serial.println(F("[BOOT] Core hardware ready"));
@@ -75,15 +75,15 @@ void loop() {
         return;
     }
 
-#if TANKRC_ENABLE_NETWORK
     auto packet = radio.poll();
+#if TANKRC_ENABLE_NETWORK
     packet.wifiConnected = wifiManager.isConnected() && !wifiManager.isApMode();
     const auto overrides = controlServer.getOverrides();
 #else
-    auto packet = radio.poll();
     packet.wifiConnected = false;
     Network::Overrides overrides{};
 #endif
+
     if (overrides.hazardOverride) {
         packet.hazard = overrides.hazardEnabled;
     }
@@ -157,7 +157,7 @@ void loop() {
 #endif
 
     Core::serviceWatchdog();
-    delay(1);  // yield to keep the watchdog happy
+    delay(1);
 }
 
 void applyRuntimeConfig() {
