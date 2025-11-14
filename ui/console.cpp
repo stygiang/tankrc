@@ -69,6 +69,22 @@ bool promptBool(const String& label, bool current) {
     }
 }
 
+String promptString(const String& label, const String& current, size_t maxLen) {
+    Serial.print(label);
+    Serial.print(" [");
+    Serial.print(current);
+    Serial.print("] : ");
+    String line = readLineBlocking();
+    line.trim();
+    if (line.isEmpty()) {
+        return current;
+    }
+    if (maxLen > 0 && line.length() >= static_cast<int>(maxLen)) {
+        line = line.substring(0, static_cast<int>(maxLen) - 1);
+    }
+    return line;
+}
+
 void showHelp() {
     Serial.println();
     Serial.println(F("=== TankRC Serial Console ==="));
@@ -78,6 +94,7 @@ void showHelp() {
     Serial.println(F("  wizard pins (wp)- Interactive pin assignment wizard"));
     Serial.println(F("  wizard features (wf) - Enable/disable feature modules"));
     Serial.println(F("  wizard test (wt)- Launch interactive test suite"));
+    Serial.println(F("  wizard wifi (ww) - Configure Wi-Fi credentials / AP settings"));
     Serial.println(F("  save (sv)       - Persist current settings to flash"));
     Serial.println(F("  load (ld)       - Reload last saved settings"));
     Serial.println(F("  defaults (df)   - Restore factory defaults"));
@@ -179,6 +196,51 @@ void configureLighting(Config::LightingConfig& lighting) {
     lighting.blink.rc = promptBool("Blink when RC link lost", lighting.blink.rc);
     lighting.blink.bt = promptBool("Blink when Bluetooth disconnected", lighting.blink.bt);
     lighting.blink.periodMs = static_cast<std::uint16_t>(promptInt("Blink period (ms)", lighting.blink.periodMs));
+}
+
+void runWifiWizard() {
+    if (!ctx_.config) {
+        Serial.println(F("Config not initialized."));
+        return;
+    }
+
+    wizardActive_ = true;
+    inputBuffer_.clear();
+
+    Config::WifiConfig wifi = ctx_.config->wifi;
+    auto toString = [](const char* data) { return (data && data[0]) ? String(data) : String(); };
+
+    Serial.println(F("Wi-Fi configuration (leave blank to keep current value)."));
+    const String staSsid = promptString("Station SSID", toString(wifi.ssid), sizeof(wifi.ssid));
+    const String staPass = promptString("Station Password", wifi.password[0] ? "[hidden]" : "", sizeof(wifi.password));
+    const String apSsid = promptString("Access Point SSID", toString(wifi.apSsid), sizeof(wifi.apSsid));
+    const String apPass = promptString("Access Point Password", wifi.apPassword[0] ? "[hidden]" : "", sizeof(wifi.apPassword));
+
+    if (!staSsid.isEmpty()) {
+        staSsid.toCharArray(wifi.ssid, sizeof(wifi.ssid));
+    }
+    if (!staPass.isEmpty() && staPass != "[hidden]") {
+        staPass.toCharArray(wifi.password, sizeof(wifi.password));
+    }
+    if (!apSsid.isEmpty()) {
+        apSsid.toCharArray(wifi.apSsid, sizeof(wifi.apSsid));
+    }
+    if (!apPass.isEmpty() && apPass != "[hidden]") {
+        apPass.toCharArray(wifi.apPassword, sizeof(wifi.apPassword));
+    }
+
+    const bool apply = promptBool("Apply Wi-Fi changes?", true);
+    if (apply) {
+        ctx_.config->wifi = wifi;
+        if (applyCallback_) {
+            applyCallback_();
+        }
+        Serial.println(F("Wi-Fi settings updated. Device may restart networking."));
+    } else {
+        Serial.println(F("Wi-Fi changes discarded."));
+    }
+
+    wizardActive_ = false;
 }
 
 void runPinWizard() {
@@ -398,6 +460,10 @@ void handleCommand(String line) {
     }
     if (lower == "wizard test" || lower == "wt" || lower == "test") {
         runTestWizard();
+        return;
+    }
+    if (lower == "wizard wifi" || lower == "ww" || lower == "wifi") {
+        runWifiWizard();
         return;
     }
     if (lower == "save" || lower == "sv") {

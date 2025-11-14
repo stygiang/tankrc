@@ -3,9 +3,9 @@
 Modular ESP-based tank-style RC platform. This repo focuses on keeping each feature isolated in its own component so the project scales without turning into a monolithic sketch.
 
 ## Layout
-- `tankrc.ino` – Arduino IDE entry point that wires up the runtime configuration wizard.
+- `tankrc.ino` – Arduino IDE entry point that wires up the runtime configuration wizard (Wi-Fi/web stack is disabled by default; define `TANKRC_ENABLE_NETWORK=1` in `platformio.ini` or before including `TankRC.h` to turn it back on).
 - `tankrc_modules.cpp` – Pulls in every module implementation so the Arduino build system compiles the deeper folder structure without extra setup.
-- `TankRC.h`, `config/`, `control/`, `drivers/`, etc. – Core firmware organized by concern (living alongside the sketch so the Arduino IDE can find them).
+- `TankRC.h`, `config/`, `control/`, `drivers/`, `features/`, `network/`, `logging/`, `time/` – Core firmware organized by concern (living alongside the sketch so the Arduino IDE can find them).
 - `docs/` – System and hardware notes.
 - `scripts/` – Helper scripts for building/flashing/testing.
 - `tests/` – Unit/integration tests and harness configs.
@@ -41,3 +41,16 @@ Four RGB assemblies (front-left/right headlights and rear-left/right reverse lig
 - **Sensor tinting:** CH5/CH6 (ultrasonic) modulate the headlight color from green (clear) to red (danger) as obstacles get closer.
 
 Address, frequency, RGB channel assignments, and blink behaviors are all editable from the serial wizard so you can match whatever wiring layout you prefer.
+
+## Wi-Fi control panel
+_Note:_ To keep the core RC loop stable on low-power setups, the firmware ships with networking disabled (`TANKRC_ENABLE_NETWORK=0`). Flip it to `1` once you’re ready for Wi-Fi/web control.
+
+Once the ESP32 joins your Wi-Fi (or exposes its fallback `TankRC-Setup` access point), open `http://<device-ip>/` to launch the TankRC Control Hub. The web UI mirrors the serial wizard, adds live telemetry, a styled mock RC model, and manual overrides (hazard/lighting) without leaving your browser:
+- Update Wi-Fi credentials, PCA9685 address/frequency, and feature toggles in one place.
+- Watch real-time steering/throttle/ultrasonic data animate the mock tank.
+- Trigger hazard flashers or force lighting states directly from the UI—useful when the radio is powered down.
+- Default AP credentials: **SSID** `TankRC-Setup`, **password** `tankrc123`.
+- Pull NTP time for accurate timestamps and download session logs (`/api/logs?format=csv`) for tuning or debugging.
+- Back up or restore the entire runtime configuration via the dashboard (JSON export/import) to clone settings across vehicles.
+
+Changes saved through the web interface persist via NVS and automatically reconfigure the firmware.

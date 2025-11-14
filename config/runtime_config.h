@@ -5,7 +5,7 @@
 #include <cstdint>
 
 namespace TankRC::Config {
-constexpr std::uint32_t kConfigVersion = 2;
+constexpr std::uint32_t kConfigVersion = 4;
 
 struct ChannelPins {
     int pwm = -1;
@@ -60,6 +60,24 @@ struct LightingConfig {
     LightingBlinkConfig blink{};
 };
 
+struct WifiConfig {
+    char ssid[32]{};
+    char password[64]{};
+    char apSsid[32]{};
+    char apPassword[64]{};
+};
+
+struct NtpConfig {
+    char server[48]{};
+    std::int32_t gmtOffsetSeconds = 0;
+    std::int32_t daylightOffsetSeconds = 0;
+};
+
+struct LoggingConfig {
+    bool enabled = true;
+    std::uint16_t maxEntries = 512;
+};
+
 struct RcConfig {
     int channelPins[6]{-1, -1, -1, -1, -1, -1};
 };
@@ -69,6 +87,9 @@ struct RuntimeConfig {
     PinAssignments pins{};
     FeatureConfig features{};
     LightingConfig lighting{};
+    WifiConfig wifi{};
+    NtpConfig ntp{};
+    LoggingConfig logging{};
     RcConfig rc{};
 };
 

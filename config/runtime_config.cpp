@@ -1,5 +1,7 @@
 #include "config/runtime_config.h"
 
+#include <cstring>
+
 #include "config/pins.h"
 
 namespace TankRC::Config {
@@ -32,6 +34,23 @@ RuntimeConfig makeDefaultConfig() {
     config.lighting.blink.wifi = true;
     config.lighting.blink.rc = true;
     config.lighting.blink.bt = true;
+
+    std::strncpy(config.wifi.ssid, "", sizeof(config.wifi.ssid));
+    std::strncpy(config.wifi.password, "", sizeof(config.wifi.password));
+    std::strncpy(config.wifi.apSsid, "TankRC-Setup", sizeof(config.wifi.apSsid));
+    std::strncpy(config.wifi.apPassword, "tankrc123", sizeof(config.wifi.apPassword));
+    config.wifi.ssid[sizeof(config.wifi.ssid) - 1] = '\0';
+    config.wifi.password[sizeof(config.wifi.password) - 1] = '\0';
+    config.wifi.apSsid[sizeof(config.wifi.apSsid) - 1] = '\0';
+    config.wifi.apPassword[sizeof(config.wifi.apPassword) - 1] = '\0';
+
+    std::strncpy(config.ntp.server, "pool.ntp.org", sizeof(config.ntp.server));
+    config.ntp.server[sizeof(config.ntp.server) - 1] = '\0';
+    config.ntp.gmtOffsetSeconds = 0;
+    config.ntp.daylightOffsetSeconds = 0;
+
+    config.logging.enabled = true;
+    config.logging.maxEntries = 512;
 
     config.rc.channelPins[0] = Pins::RC_CH1;
     config.rc.channelPins[1] = Pins::RC_CH2;
