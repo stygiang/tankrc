@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstdarg>
 #include <iterator>
+#include <vector>
 
 #include "comms/radio_link.h"
 #include "control/drive_controller.h"
@@ -55,6 +56,16 @@ String inputBuffer_;
 bool promptShown_ = false;
 bool wizardActive_ = false;
 bool wizardAbortRequested_ = false;
+static Config::RuntimeConfig baselineConfig_{};
+static bool baselineInitialized_ = false;
+
+void processLine(const String& line);
+static void snapshotBaseline() {
+    if (ctx_.config) {
+        baselineConfig_ = *ctx_.config;
+        baselineInitialized_ = true;
+    }
+}
 
 void processLine(const String& line);
 
@@ -205,6 +216,104 @@ void showConfig() {
     console.printf("Sound enabled: %s\n", features.soundEnabled ? "yes" : "no");
     console.printf("Sensors enabled: %s\n", features.sensorsEnabled ? "yes" : "no");
     console.println();
+}
+
+struct PinTokenInfo {
+    String token;
+    const char* description;
+    int* value;
+    int baseline;
+};
+
+static std::vector<PinTokenInfo> collectPinTokens() {
+    std::vector<PinTokenInfo> tokens;
+    if (!ctx_.config) {
+        return tokens;
+    }
+
+    auto& pins = ctx_.config->pins;
+    auto& rc = ctx_.config->rc;
+    const auto* basePins = baselineInitialized_ ? &baselineConfig_.pins : nullptr;
+    const auto* baseRc = baselineInitialized_ ? &baselineConfig_.rc : nullptr;
+
+    auto baselineValue = [&](int current, const int* basePtr) {
+        return (baselineInitialized_ && basePtr) ? *basePtr : current;
+    };
+
+    auto add = [&](const char* token, const char* desc, int& ref, const int* basePtr) {
+        PinTokenInfo info;
+        info.token = token;
+        info.description = desc;
+        info.value = &ref;
+        info.baseline = baselineValue(ref, basePtr);
+        tokens.push_back(info);
+    };
+
+    const auto& bp = baselineConfig_.pins;
+    add("lma_pwm", "Left motor A PWM", pins.leftDriver.motorA.pwm, basePins ? &bp.leftDriver.motorA.pwm : nullptr);
+    add("lma_in1", "Left motor A IN1", pins.leftDriver.motorA.in1, basePins ? &bp.leftDriver.motorA.in1 : nullptr);
+    add("lma_in2", "Left motor A IN2", pins.leftDriver.motorA.in2, basePins ? &bp.leftDriver.motorA.in2 : nullptr);
+    add("lmb_pwm", "Left motor B PWM", pins.leftDriver.motorB.pwm, basePins ? &bp.leftDriver.motorB.pwm : nullptr);
+    add("lmb_in1", "Left motor B IN1", pins.leftDriver.motorB.in1, basePins ? &bp.leftDriver.motorB.in1 : nullptr);
+    add("lmb_in2", "Left motor B IN2", pins.leftDriver.motorB.in2, basePins ? &bp.leftDriver.motorB.in2 : nullptr);
+    add("left_stby", "Left driver STBY", pins.leftDriver.standby, basePins ? &bp.leftDriver.standby : nullptr);
+
+    add("rma_pwm", "Right motor A PWM", pins.rightDriver.motorA.pwm, basePins ? &bp.rightDriver.motorA.pwm : nullptr);
+    add("rma_in1", "Right motor A IN1", pins.rightDriver.motorA.in1, basePins ? &bp.rightDriver.motorA.in1 : nullptr);
+    add("rma_in2", "Right motor A IN2", pins.rightDriver.motorA.in2, basePins ? &bp.rightDriver.motorA.in2 : nullptr);
+    add("rmb_pwm", "Right motor B PWM", pins.rightDriver.motorB.pwm, basePins ? &bp.rightDriver.motorB.pwm : nullptr);
+    add("rmb_in1", "Right motor B IN1", pins.rightDriver.motorB.in1, basePins ? &bp.rightDriver.motorB.in1 : nullptr);
+    add("rmb_in2", "Right motor B IN2", pins.rightDriver.motorB.in2, basePins ? &bp.rightDriver.motorB.in2 : nullptr);
+    add("right_stby", "Right driver STBY", pins.rightDriver.standby, basePins ? &bp.rightDriver.standby : nullptr);
+
+    add("lightbar", "Light bar pin", pins.lightBar, basePins ? &bp.lightBar : nullptr);
+    add("speaker", "Speaker pin", pins.speaker, basePins ? &bp.speaker : nullptr);
+    add("battery", "Battery sense pin", pins.batterySense, basePins ? &bp.batterySense : nullptr);
+
+    for (std::size_t i = 0; i < std::size(rc.channelPins); ++i) {
+        String name = "rc" + String(i + 1);
+        PinTokenInfo info;
+        info.token = name;
+        info.description = "RC channel pin";
+        info.value = &rc.channelPins[i];
+        info.baseline = baselineValue(rc.channelPins[i], baseRc ? &baseRc->channelPins[i] : nullptr);
+        tokens.push_back(info);
+    }
+
+    return tokens;
+}
+
+static void printPinList() {
+    const auto tokens = collectPinTokens();
+    if (tokens.empty()) {
+        console.println(F("No pin data available."));
+        return;
+    }
+    console.println(F("--- Pin Tokens ---"));
+    for (const auto& t : tokens) {
+        console.printf("%-10s = %-4d (%s)\n", t.token.c_str(), *t.value, t.description);
+    }
+}
+
+static void printPinDiff() {
+    if (!baselineInitialized_) {
+        console.println(F("No saved baseline yet. Save the config first."));
+        return;
+    }
+    const auto tokens = collectPinTokens();
+    bool any = false;
+    for (const auto& t : tokens) {
+        if (*t.value != t.baseline) {
+            if (!any) {
+                console.println(F("--- Pin diffs since last save ---"));
+                any = true;
+            }
+            console.printf("%-10s: %d -> %d\n", t.token.c_str(), t.baseline, *t.value);
+        }
+    }
+    if (!any) {
+        console.println(F("No pin changes since last save."));
+    }
 }
 
 void configureChannel(const char* label, Config::ChannelPins& pins) {
@@ -368,6 +477,16 @@ void handlePinCommand(const String& args) {
         console.println(F("  rmb_pwm,rmb_in1,rmb_in2"));
         console.println(F("  left_stby,right_stby,lightbar,speaker,battery"));
         console.println(F("  rc1,rc2,rc3,rc4,rc5,rc6"));
+        console.println(F("  list  (show all pins)"));
+        console.println(F("  diff  (show pins changed since last save)"));
+        return;
+    }
+    if (token == "list") {
+        printPinList();
+        return;
+    }
+    if (token == "diff") {
+        printPinDiff();
         return;
     }
 
@@ -691,6 +810,7 @@ void handleCommand(String line) {
     if (lower == "save" || lower == "sv") {
         if (ctx_.store && ctx_.config && ctx_.store->save(*ctx_.config)) {
             console.println(F("Settings saved."));
+            snapshotBaseline();
         } else {
             console.println(F("Failed to save settings."));
         }
@@ -706,6 +826,7 @@ void handleCommand(String line) {
             if (applyCallback_) {
                 applyCallback_();
             }
+            snapshotBaseline();
         } else {
             console.println(F("Storage unavailable."));
         }
@@ -753,6 +874,7 @@ void begin(const Context& ctx, ApplyConfigCallback applyCallback) {
     applyCallback_ = applyCallback;
     promptShown_ = false;
     inputBuffer_.clear();
+    snapshotBaseline();
 }
 
 void update() {
