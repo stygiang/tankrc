@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <cstdint>
+#include <iterator>
 
 #include "comms/radio_link.h"
 #include "control/drive_controller.h"
@@ -15,6 +16,7 @@ ApplyConfigCallback applyCallback_ = nullptr;
 String inputBuffer_;
 bool promptShown_ = false;
 bool wizardActive_ = false;
+bool wizardAbortRequested_ = false;
 
 String readLineBlocking() {
     String line;
@@ -43,6 +45,12 @@ int promptInt(const String& label, int current) {
     if (line.isEmpty()) {
         return current;
     }
+    String lower = line;
+    lower.toLowerCase();
+    if (lower == "q" || lower == "quit" || lower == "exit") {
+        wizardAbortRequested_ = true;
+        return current;
+    }
     return line.toInt();
 }
 
@@ -57,6 +65,10 @@ bool promptBool(const String& label, bool current) {
         line.trim();
         line.toLowerCase();
         if (line.isEmpty()) {
+            return current;
+        }
+        if (line == "q" || line == "quit" || line == "exit") {
+            wizardAbortRequested_ = true;
             return current;
         }
         if (line == "y" || line == "yes" || line == "1" || line == "true") {
@@ -79,6 +91,12 @@ String promptString(const String& label, const String& current, size_t maxLen) {
     if (line.isEmpty()) {
         return current;
     }
+    String lower = line;
+    lower.toLowerCase();
+    if (lower == "q" || lower == "quit" || lower == "exit") {
+        wizardAbortRequested_ = true;
+        return current;
+    }
     if (maxLen > 0 && line.length() >= static_cast<int>(maxLen)) {
         line = line.substring(0, static_cast<int>(maxLen) - 1);
     }
@@ -94,6 +112,7 @@ void showHelp() {
     Serial.println(F("  wizard pins (wp)- Interactive pin assignment wizard"));
     Serial.println(F("  wizard features (wf) - Enable/disable feature modules"));
     Serial.println(F("  wizard test (wt)- Launch interactive test suite"));
+    Serial.println(F("  pin <token> [value] - Show/update a single pin (type 'pin help' for tokens)"));
     Serial.println(F("  wizard wifi (ww) - Configure Wi-Fi credentials / AP settings"));
     Serial.println(F("  save (sv)       - Persist current settings to flash"));
     Serial.println(F("  load (ld)       - Reload last saved settings"));
@@ -151,7 +170,9 @@ void showConfig() {
 void configureChannel(const char* label, Config::ChannelPins& pins) {
     Serial.println(label);
     pins.pwm = promptInt("  PWM", pins.pwm);
+    if (wizardAbortRequested_) return;
     pins.in1 = promptInt("  IN1", pins.in1);
+    if (wizardAbortRequested_) return;
     pins.in2 = promptInt("  IN2", pins.in2);
 }
 
@@ -175,6 +196,9 @@ void configureRcPins(Config::RcConfig& rc) {
     Serial.println(F("RC receiver pins:"));
     for (std::size_t i = 0; i < Drivers::RcReceiver::kChannelCount; ++i) {
         rc.channelPins[i] = promptInt(labels[i], rc.channelPins[i]);
+        if (wizardAbortRequested_) {
+            break;
+        }
     }
 }
 
@@ -189,12 +213,19 @@ void configureLighting(Config::LightingConfig& lighting) {
         lighting.pwmFrequency = static_cast<std::uint16_t>(freq);
     }
     configureRgbChannel("Front left RGB channels", lighting.channels.frontLeft);
+    if (wizardAbortRequested_) return;
     configureRgbChannel("Front right RGB channels", lighting.channels.frontRight);
+    if (wizardAbortRequested_) return;
     configureRgbChannel("Rear left RGB channels", lighting.channels.rearLeft);
+    if (wizardAbortRequested_) return;
     configureRgbChannel("Rear right RGB channels", lighting.channels.rearRight);
+    if (wizardAbortRequested_) return;
     lighting.blink.wifi = promptBool("Blink when WiFi disconnected", lighting.blink.wifi);
+    if (wizardAbortRequested_) return;
     lighting.blink.rc = promptBool("Blink when RC link lost", lighting.blink.rc);
+    if (wizardAbortRequested_) return;
     lighting.blink.bt = promptBool("Blink when Bluetooth disconnected", lighting.blink.bt);
+    if (wizardAbortRequested_) return;
     lighting.blink.periodMs = static_cast<std::uint16_t>(promptInt("Blink period (ms)", lighting.blink.periodMs));
 }
 
@@ -210,11 +241,35 @@ void runWifiWizard() {
     Config::WifiConfig wifi = ctx_.config->wifi;
     auto toString = [](const char* data) { return (data && data[0]) ? String(data) : String(); };
 
-    Serial.println(F("Wi-Fi configuration (leave blank to keep current value)."));
+    Serial.println(F("Wi-Fi configuration (leave blank to keep current value, or type 'q' to exit)."));
     const String staSsid = promptString("Station SSID", toString(wifi.ssid), sizeof(wifi.ssid));
+    if (wizardAbortRequested_) {
+        wizardAbortRequested_ = false;
+        Serial.println(F("Wi-Fi wizard cancelled."));
+        wizardActive_ = false;
+        return;
+    }
     const String staPass = promptString("Station Password", wifi.password[0] ? "[hidden]" : "", sizeof(wifi.password));
+    if (wizardAbortRequested_) {
+        wizardAbortRequested_ = false;
+        Serial.println(F("Wi-Fi wizard cancelled."));
+        wizardActive_ = false;
+        return;
+    }
     const String apSsid = promptString("Access Point SSID", toString(wifi.apSsid), sizeof(wifi.apSsid));
+    if (wizardAbortRequested_) {
+        wizardAbortRequested_ = false;
+        Serial.println(F("Wi-Fi wizard cancelled."));
+        wizardActive_ = false;
+        return;
+    }
     const String apPass = promptString("Access Point Password", wifi.apPassword[0] ? "[hidden]" : "", sizeof(wifi.apPassword));
+    if (wizardAbortRequested_) {
+        wizardAbortRequested_ = false;
+        Serial.println(F("Wi-Fi wizard cancelled."));
+        wizardActive_ = false;
+        return;
+    }
 
     if (!staSsid.isEmpty()) {
         staSsid.toCharArray(wifi.ssid, sizeof(wifi.ssid));
@@ -243,6 +298,100 @@ void runWifiWizard() {
     wizardActive_ = false;
 }
 
+void handlePinCommand(const String& args) {
+    if (!ctx_.config) {
+        Serial.println(F("Config not initialized."));
+        return;
+    }
+    String trimmed = args;
+    trimmed.trim();
+    if (trimmed.isEmpty()) {
+        Serial.println(F("Usage: pin <token> [value]. Type 'pin help' for the token list."));
+        return;
+    }
+    String token;
+    String valueStr;
+    int space = trimmed.indexOf(' ');
+    if (space < 0) {
+        token = trimmed;
+    } else {
+        token = trimmed.substring(0, space);
+        valueStr = trimmed.substring(space + 1);
+        valueStr.trim();
+    }
+    token.toLowerCase();
+    if (token == "help") {
+        Serial.println(F("Tokens:"));
+        Serial.println(F("  lma_pwm,lma_in1,lma_in2"));
+        Serial.println(F("  lmb_pwm,lmb_in1,lmb_in2"));
+        Serial.println(F("  rma_pwm,rma_in1,rma_in2"));
+        Serial.println(F("  rmb_pwm,rmb_in1,rmb_in2"));
+        Serial.println(F("  left_stby,right_stby,lightbar,speaker,battery"));
+        Serial.println(F("  rc1,rc2,rc3,rc4,rc5,rc6"));
+        return;
+    }
+
+    auto& pins = ctx_.config->pins;
+    struct Binding {
+        const char* name;
+        int* ptr;
+    };
+    Binding bindings[] = {
+        {"lma_pwm", &pins.leftDriver.motorA.pwm},
+        {"lma_in1", &pins.leftDriver.motorA.in1},
+        {"lma_in2", &pins.leftDriver.motorA.in2},
+        {"lmb_pwm", &pins.leftDriver.motorB.pwm},
+        {"lmb_in1", &pins.leftDriver.motorB.in1},
+        {"lmb_in2", &pins.leftDriver.motorB.in2},
+        {"rma_pwm", &pins.rightDriver.motorA.pwm},
+        {"rma_in1", &pins.rightDriver.motorA.in1},
+        {"rma_in2", &pins.rightDriver.motorA.in2},
+        {"rmb_pwm", &pins.rightDriver.motorB.pwm},
+        {"rmb_in1", &pins.rightDriver.motorB.in1},
+        {"rmb_in2", &pins.rightDriver.motorB.in2},
+        {"left_stby", &pins.leftDriver.standby},
+        {"right_stby", &pins.rightDriver.standby},
+        {"lightbar", &pins.lightBar},
+        {"speaker", &pins.speaker},
+        {"battery", &pins.batterySense},
+    };
+
+    for (const auto& binding : bindings) {
+        if (token == binding.name) {
+            if (valueStr.isEmpty()) {
+                Serial.printf("%s = %d\n", binding.name, *binding.ptr);
+            } else {
+                const int value = valueStr.toInt();
+                *binding.ptr = value;
+                Serial.printf("%s set to %d\n", binding.name, value);
+                if (applyCallback_) {
+                    applyCallback_();
+                }
+            }
+            return;
+        }
+    }
+
+    if (token.startsWith("rc")) {
+        int index = token.substring(2).toInt();
+        if (index >= 1 && index <= static_cast<int>(std::size(ctx_.config->rc.channelPins))) {
+            int& slot = ctx_.config->rc.channelPins[index - 1];
+            if (valueStr.isEmpty()) {
+                Serial.printf("rc%d = %d\n", index, slot);
+            } else {
+                slot = valueStr.toInt();
+                Serial.printf("rc%d set to %d\n", index, slot);
+                if (applyCallback_) {
+                    applyCallback_();
+                }
+            }
+            return;
+        }
+    }
+
+    Serial.println(F("Unknown token. Type 'pin help' for the token list."));
+}
+
 void runPinWizard() {
     if (!ctx_.config) {
         Serial.println(F("Config not initialized."));
@@ -253,23 +402,47 @@ void runPinWizard() {
     inputBuffer_.clear();
 
     Config::RuntimeConfig temp = *ctx_.config;
-    Serial.println(F("Pin assignment wizard. Press Enter to keep the current value."));
+    wizardAbortRequested_ = false;
+    Serial.println(F("Pin assignment wizard. Press Enter to keep the current value, or type 'q' to exit early."));
 
-    configureChannel("Left Driver Motor A", temp.pins.leftDriver.motorA);
-    configureChannel("Left Driver Motor B", temp.pins.leftDriver.motorB);
-    temp.pins.leftDriver.standby = promptInt("Left driver STBY", temp.pins.leftDriver.standby);
+    bool aborted = false;
 
-    configureChannel("Right Driver Motor A", temp.pins.rightDriver.motorA);
-    configureChannel("Right Driver Motor B", temp.pins.rightDriver.motorB);
-    temp.pins.rightDriver.standby = promptInt("Right driver STBY", temp.pins.rightDriver.standby);
+    do {
+        configureChannel("Left Driver Motor A", temp.pins.leftDriver.motorA);
+        if (wizardAbortRequested_) { aborted = true; break; }
+        configureChannel("Left Driver Motor B", temp.pins.leftDriver.motorB);
+        if (wizardAbortRequested_) { aborted = true; break; }
+        temp.pins.leftDriver.standby = promptInt("Left driver STBY", temp.pins.leftDriver.standby);
+        if (wizardAbortRequested_) { aborted = true; break; }
 
-    temp.pins.lightBar = promptInt("Light bar pin", temp.pins.lightBar);
-    temp.pins.speaker = promptInt("Speaker pin", temp.pins.speaker);
-    temp.pins.batterySense = promptInt("Battery sense pin", temp.pins.batterySense);
-    configureRcPins(temp.rc);
-    configureLighting(temp.lighting);
+        configureChannel("Right Driver Motor A", temp.pins.rightDriver.motorA);
+        if (wizardAbortRequested_) { aborted = true; break; }
+        configureChannel("Right Driver Motor B", temp.pins.rightDriver.motorB);
+        if (wizardAbortRequested_) { aborted = true; break; }
+        temp.pins.rightDriver.standby = promptInt("Right driver STBY", temp.pins.rightDriver.standby);
+        if (wizardAbortRequested_) { aborted = true; break; }
 
-    const bool apply = promptBool("Apply these changes?", true);
+        temp.pins.lightBar = promptInt("Light bar pin", temp.pins.lightBar);
+        if (wizardAbortRequested_) { aborted = true; break; }
+        temp.pins.speaker = promptInt("Speaker pin", temp.pins.speaker);
+        if (wizardAbortRequested_) { aborted = true; break; }
+        temp.pins.batterySense = promptInt("Battery sense pin", temp.pins.batterySense);
+        if (wizardAbortRequested_) { aborted = true; break; }
+        configureRcPins(temp.rc);
+        if (wizardAbortRequested_) { aborted = true; break; }
+        configureLighting(temp.lighting);
+        if (wizardAbortRequested_) { aborted = true; break; }
+    } while (false);
+
+    if (wizardAbortRequested_) {
+        wizardAbortRequested_ = false;
+    }
+
+    if (aborted) {
+        Serial.println(F("Pin wizard exited early. Changes entered so far can still be applied."));
+    }
+
+    const bool apply = promptBool(aborted ? "Apply the changes made so far?" : "Apply these changes?", true);
     if (apply) {
         *ctx_.config = temp;
         if (applyCallback_) {
@@ -464,6 +637,15 @@ void handleCommand(String line) {
     }
     if (lower == "wizard wifi" || lower == "ww" || lower == "wifi") {
         runWifiWizard();
+        return;
+    }
+    if (lower.startsWith("pin")) {
+        int space = line.indexOf(' ');
+        if (space < 0) {
+            Serial.println(F("Usage: pin <token> [value]. Type 'pin help' for options."));
+        } else {
+            handlePinCommand(line.substring(space + 1));
+        }
         return;
     }
     if (lower == "save" || lower == "sv") {
