@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 
+#include "config/features.h"
 #include "config/settings.h"
 #include "drivers/battery_monitor.h"
 #include "drivers/motor_driver.h"
@@ -11,11 +12,15 @@ namespace {
 Drivers::MotorDriver leftMotor;
 Drivers::MotorDriver rightMotor;
 Drivers::BatteryMonitor battery;
+#if FEATURE_LIGHTS
 Features::Lighting lighting;
+#endif
 
 Config::RuntimeConfig currentConfig{};
 bool motorsReady = false;
+#if FEATURE_LIGHTS
 bool lightingReady = false;
+#endif
 }  // namespace
 
 namespace {
@@ -40,8 +45,12 @@ void configureBattery(const Config::RuntimeConfig& config) {
 }
 
 void configureLighting(const Config::RuntimeConfig& config) {
+#if FEATURE_LIGHTS
     lighting.begin(config);
     lightingReady = true;
+#else
+    (void)config;
+#endif
 }
 }  // namespace
 
@@ -50,8 +59,10 @@ void begin(const Config::RuntimeConfig& config) {
     motorsReady = false;
     configureMotors(config);
     configureBattery(config);
+#if FEATURE_LIGHTS
     lightingReady = false;
     configureLighting(config);
+#endif
 }
 
 void applyConfig(const Config::RuntimeConfig& config) {
@@ -59,8 +70,10 @@ void applyConfig(const Config::RuntimeConfig& config) {
     motorsReady = false;
     configureMotors(config);
     configureBattery(config);
+#if FEATURE_LIGHTS
     lightingReady = false;
     configureLighting(config);
+#endif
 }
 
 std::uint32_t millis32() {
@@ -100,16 +113,24 @@ float readBatteryVoltage() {
 }
 
 void setLightingEnabled(bool enabled) {
+#if FEATURE_LIGHTS
     if (!lightingReady) {
         return;
     }
     lighting.setFeatureEnabled(enabled);
+#else
+    (void)enabled;
+#endif
 }
 
 void updateLighting(const Features::LightingInput& input) {
+#if FEATURE_LIGHTS
     if (!lightingReady) {
         return;
     }
     lighting.update(input);
+#else
+    (void)input;
+#endif
 }
 }  // namespace TankRC::Hal

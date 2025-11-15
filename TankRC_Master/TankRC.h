@@ -14,6 +14,7 @@
 #include "network/wifi_manager.h"
 #include "time/ntp_clock.h"
 #include "drivers/rc_receiver.h"
+#include "channels/rc_channels.h"
 #include "features/sound_fx.h"
 #include "storage/config_store.h"
 #include "ui/console.h"

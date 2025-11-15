@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "features/lighting.h"
+#include "features/light_map.h"
 
 namespace TankRC::Features {
 namespace {
@@ -121,17 +122,17 @@ void Lighting::update(const LightingInput& input) {
         frontRight = blend(frontRight, overlay, rightCloseness);
     }
 
-    applyLight(config_.channels.frontLeft, frontLeft);
-    applyLight(config_.channels.frontRight, frontRight);
-    applyLight(config_.channels.rearLeft, rearLeft);
-    applyLight(config_.channels.rearRight, rearRight);
+    applyLight(channelFor(config_.channels, LightId::HeadLeft), frontLeft);
+    applyLight(channelFor(config_.channels, LightId::HeadRight), frontRight);
+    applyLight(channelFor(config_.channels, LightId::TailLeft), rearLeft);
+    applyLight(channelFor(config_.channels, LightId::TailRight), rearRight);
 }
 
 void Lighting::setAllLights(const Color& color) {
-    applyLight(config_.channels.frontLeft, color);
-    applyLight(config_.channels.frontRight, color);
-    applyLight(config_.channels.rearLeft, color);
-    applyLight(config_.channels.rearRight, color);
+    applyLight(channelFor(config_.channels, LightId::HeadLeft), color);
+    applyLight(channelFor(config_.channels, LightId::HeadRight), color);
+    applyLight(channelFor(config_.channels, LightId::TailLeft), color);
+    applyLight(channelFor(config_.channels, LightId::TailRight), color);
 }
 
 void Lighting::applyLight(const Config::RgbChannel& channel, const Color& color) {
@@ -160,10 +161,10 @@ bool Lighting::applyHazardPattern(const LightingInput& input) {
     }
     const bool on = (hazardPhase_ == 0 || hazardPhase_ == 2);
     const Color color = on ? kTurnColor : kOff;
-    applyLight(config_.channels.frontLeft, color);
-    applyLight(config_.channels.frontRight, color);
-    applyLight(config_.channels.rearLeft, color);
-    applyLight(config_.channels.rearRight, color);
+    applyLight(channelFor(config_.channels, LightId::HeadLeft), color);
+    applyLight(channelFor(config_.channels, LightId::HeadRight), color);
+    applyLight(channelFor(config_.channels, LightId::TailLeft), color);
+    applyLight(channelFor(config_.channels, LightId::TailRight), color);
     return true;
 }
 
@@ -213,10 +214,10 @@ bool Lighting::applyConnectionPattern(const LightingInput& input) {
             break;
     }
 
-    applyLight(config_.channels.frontLeft, frontLeft);
-    applyLight(config_.channels.frontRight, frontRight);
-    applyLight(config_.channels.rearLeft, rearLeft);
-    applyLight(config_.channels.rearRight, rearRight);
+    applyLight(channelFor(config_.channels, LightId::HeadLeft), frontLeft);
+    applyLight(channelFor(config_.channels, LightId::HeadRight), frontRight);
+    applyLight(channelFor(config_.channels, LightId::TailLeft), rearLeft);
+    applyLight(channelFor(config_.channels, LightId::TailRight), rearRight);
     return true;
 }
 

@@ -2,6 +2,7 @@
 #include <algorithm>
 
 #include "comms/radio_link.h"
+#include "channels/rc_channels.h"
 #include "hal/hal.h"
 
 namespace TankRC::Comms {
@@ -32,15 +33,18 @@ CommandPacket RadioLink::poll() {
     CommandPacket packet{};
     const auto frame = Hal::readRcFrame();
 
-    packet.drive.turn = clampRange(frame.normalized[0]);
-    packet.drive.throttle = clampRange(frame.normalized[1]);
-    const float ch3 = frame.normalized[2];
-    packet.auxButton = ch3 > 0.35F;
-    packet.hazard = ch3 < -0.35F;
-    packet.status = modeFromChannel(frame.normalized[3]);
-    packet.auxChannel5 = frame.widths[4] > 0 ? toZeroOne(frame.normalized[4]) : 1.0F;
-    packet.auxChannel6 = frame.widths[5] > 0 ? toZeroOne(frame.normalized[5]) : 1.0F;
-    packet.rcLinked = (frame.widths[0] > 0 || frame.widths[1] > 0);
+    packet.drive.turn = clampRange(Channels::readNormalized(frame, Channels::RcChannel::Steering));
+    packet.drive.throttle = clampRange(Channels::readNormalized(frame, Channels::RcChannel::Throttle));
+    const float auxPrimary = Channels::readNormalized(frame, Channels::RcChannel::AuxPrimary);
+    packet.auxButton = auxPrimary > 0.35F;
+    packet.hazard = auxPrimary < -0.35F;
+    packet.status = modeFromChannel(Channels::readNormalized(frame, Channels::RcChannel::Mode));
+    const unsigned long aux5Width = Channels::readWidth(frame, Channels::RcChannel::Aux5);
+    const unsigned long aux6Width = Channels::readWidth(frame, Channels::RcChannel::Aux6);
+    packet.auxChannel5 = aux5Width > 0 ? toZeroOne(Channels::readNormalized(frame, Channels::RcChannel::Aux5)) : 1.0F;
+    packet.auxChannel6 = aux6Width > 0 ? toZeroOne(Channels::readNormalized(frame, Channels::RcChannel::Aux6)) : 1.0F;
+    packet.rcLinked = (Channels::readWidth(frame, Channels::RcChannel::Steering) > 0 ||
+                       Channels::readWidth(frame, Channels::RcChannel::Throttle) > 0);
     packet.wifiConnected = true;
 
     // Simple defaults: aux button toggles lighting, sound follows mode.
