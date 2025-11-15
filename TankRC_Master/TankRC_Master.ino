@@ -35,6 +35,24 @@ static unsigned long lastLogMs = 0UL;
 static unsigned long lastLogMs = 0UL;
 #endif
 
+struct Task {
+    void (*fn)();
+    std::uint32_t intervalMs;
+    std::uint32_t lastRunMs;
+};
+
+void taskReadInputs();
+void taskControl();
+void taskOutputs();
+void taskHousekeeping();
+
+Task tasks[] = {
+    {taskReadInputs, 5, 0},
+    {taskControl, 5, 0},
+    {taskOutputs, 5, 0},
+    {taskHousekeeping, 100, 0},
+};
+
 void applyRuntimeConfig();
 
 void setup() {
@@ -79,7 +97,96 @@ void setup() {
 #endif
 }
 
-void loop() {
+static Comms::CommandPacket currentPacket{};
+static Comms::SlaveProtocol::LightingCommand pendingLighting{};
+static bool outputsEnabled = false;
+
+void taskReadInputs() {
+    currentPacket = radio.poll();
+#if TANKRC_ENABLE_NETWORK
+    currentPacket.wifiConnected = wifiManager.isConnected() && !wifiManager.isApMode();
+    const auto overrides = controlServer.getOverrides();
+#else
+    currentPacket.wifiConnected = false;
+    Network::Overrides overrides{};
+#endif
+    if (overrides.hazardOverride) {
+        currentPacket.hazard = overrides.hazardEnabled;
+    }
+    if (overrides.lightsOverride) {
+        currentPacket.lightingState = overrides.lightsEnabled;
+    }
+}
+
+void taskControl() {
+    auto driveCommand = currentPacket.drive;
+    if (currentPacket.status == Comms::RcStatusMode::Locked) {
+        driveCommand.throttle = 0.0F;
+        driveCommand.turn = 0.0F;
+    } else if (currentPacket.status == Comms::RcStatusMode::Debug) {
+        driveCommand.throttle *= 0.5F;
+        driveCommand.turn *= 0.5F;
+    }
+    driveController.setCommand(driveCommand);
+    pendingLighting = {};
+    pendingLighting.ultrasonicLeft = currentPacket.auxChannel5;
+    pendingLighting.ultrasonicRight = currentPacket.auxChannel6;
+    pendingLighting.status = static_cast<std::uint8_t>(currentPacket.status);
+    if (currentPacket.hazard) {
+        pendingLighting.flags |= Comms::SlaveProtocol::LightingHazard;
+    }
+    if (currentPacket.rcLinked) {
+        pendingLighting.flags |= Comms::SlaveProtocol::LightingRcLinked;
+    }
+    if (currentPacket.wifiConnected) {
+        pendingLighting.flags |= Comms::SlaveProtocol::LightingWifiLinked;
+    }
+    outputsEnabled = currentPacket.status != Comms::RcStatusMode::Locked;
+    const bool lightingInstalled = runtimeConfig.features.lightingEnabled;
+    const bool hazardActive = lightingInstalled && currentPacket.hazard;
+    const bool lightEnable = lightingInstalled && outputsEnabled && currentPacket.lightingState;
+    const bool lightingEffective = lightEnable || hazardActive;
+    if (lightingEffective) {
+        pendingLighting.flags |= Comms::SlaveProtocol::LightingEnabled;
+    }
+    driveController.setLightingCommand(pendingLighting);
+    driveController.update();
+    sound.update(outputsEnabled && currentPacket.soundState);
+}
+
+void taskOutputs() {
+#if TANKRC_ENABLE_NETWORK
+    Network::ControlState state{};
+    state.steering = currentPacket.drive.turn;
+    state.throttle = currentPacket.drive.throttle;
+    state.hazard = currentPacket.hazard;
+    state.lighting = (pendingLighting.flags & Comms::SlaveProtocol::LightingEnabled) != 0;
+    state.mode = currentPacket.status;
+    state.rcLinked = currentPacket.rcLinked;
+    state.wifiLinked = currentPacket.wifiConnected;
+    state.ultrasonicLeft = currentPacket.auxChannel5;
+    state.ultrasonicRight = currentPacket.auxChannel6;
+    state.serverTime = ntpClock.now();
+    controlServer.updateState(state);
+
+    if (sessionLogger.enabled()) {
+        const unsigned long nowMs = Hal::millis32();
+        if (lastLogMs == 0 || nowMs - lastLogMs >= 200) {
+            lastLogMs = nowMs;
+            Logging::LogEntry entry{};
+            entry.epoch = ntpClock.now();
+            entry.steering = currentPacket.drive.turn;
+            entry.throttle = currentPacket.drive.throttle;
+            entry.hazard = currentPacket.hazard;
+            entry.mode = currentPacket.status;
+            entry.battery = driveController.readBatteryVoltage();
+            sessionLogger.log(entry);
+        }
+    }
+#endif
+}
+
+void taskHousekeeping() {
 #if TANKRC_ENABLE_NETWORK
     wifiManager.loop();
     ntpClock.update(wifiManager.isConnected());
@@ -87,99 +194,23 @@ void loop() {
     remoteConsole.loop();
 #endif
     UI::update();
+}
 
+void loop() {
     if (UI::isWizardActive()) {
         Core::serviceWatchdog();
+        Hal::delayMs(1);
         return;
     }
-
-    auto packet = radio.poll();
-#if TANKRC_ENABLE_NETWORK
-    packet.wifiConnected = wifiManager.isConnected() && !wifiManager.isApMode();
-    const auto overrides = controlServer.getOverrides();
-#else
-    packet.wifiConnected = false;
-    Network::Overrides overrides{};
-#endif
-
-    if (overrides.hazardOverride) {
-        packet.hazard = overrides.hazardEnabled;
-    }
-    if (overrides.lightsOverride) {
-        packet.lightingState = overrides.lightsEnabled;
-    }
-
-    auto driveCommand = packet.drive;
-    if (packet.status == Comms::RcStatusMode::Locked) {
-        driveCommand.throttle = 0.0F;
-        driveCommand.turn = 0.0F;
-    } else if (packet.status == Comms::RcStatusMode::Debug) {
-        driveCommand.throttle *= 0.5F;
-        driveCommand.turn *= 0.5F;
-    }
-
-    driveController.setCommand(driveCommand);
-
-    Comms::SlaveProtocol::LightingCommand lightingCommand{};
-    lightingCommand.ultrasonicLeft = packet.auxChannel5;
-    lightingCommand.ultrasonicRight = packet.auxChannel6;
-    lightingCommand.status = static_cast<std::uint8_t>(packet.status);
-    if (packet.hazard) {
-        lightingCommand.flags |= Comms::SlaveProtocol::LightingHazard;
-    }
-    if (packet.rcLinked) {
-        lightingCommand.flags |= Comms::SlaveProtocol::LightingRcLinked;
-    }
-    if (packet.wifiConnected) {
-        lightingCommand.flags |= Comms::SlaveProtocol::LightingWifiLinked;
-    }
-    const bool outputsEnabled = packet.status != Comms::RcStatusMode::Locked;
-
-    const bool lightingInstalled = runtimeConfig.features.lightingEnabled;
-    const bool hazardActive = lightingInstalled && packet.hazard;
-    const bool lightEnable = lightingInstalled && outputsEnabled && packet.lightingState;
-    const bool lightingEffective = lightEnable || hazardActive;
-    if (lightingEffective) {
-        lightingCommand.flags |= Comms::SlaveProtocol::LightingEnabled;
-    }
-
-    driveController.setLightingCommand(lightingCommand);
-    driveController.update();
-
-    sound.update(outputsEnabled && packet.soundState);
-
-#if TANKRC_ENABLE_NETWORK
-    Network::ControlState state{};
-    state.steering = driveCommand.turn;
-    state.throttle = driveCommand.throttle;
-    state.hazard = packet.hazard;
-    state.lighting = lightingEffective;
-    state.mode = packet.status;
-    state.rcLinked = packet.rcLinked;
-    state.wifiLinked = packet.wifiConnected;
-    state.ultrasonicLeft = packet.auxChannel5;
-    state.ultrasonicRight = packet.auxChannel6;
-    state.serverTime = ntpClock.now();
-    controlServer.updateState(state);
-
-    if (sessionLogger.enabled()) {
-        const unsigned long nowMs = millis();
-        if (lastLogMs == 0 || nowMs - lastLogMs >= 200) {
-            lastLogMs = nowMs;
-            Logging::LogEntry entry{};
-            entry.epoch = ntpClock.now();
-            entry.steering = driveCommand.turn;
-            entry.throttle = driveCommand.throttle;
-            entry.hazard = packet.hazard;
-            entry.mode = packet.status;
-            entry.battery = driveController.readBatteryVoltage();
-            sessionLogger.log(entry);
+    const std::uint32_t now = Hal::millis32();
+    for (auto& task : tasks) {
+        if (now - task.lastRunMs >= task.intervalMs) {
+            task.lastRunMs = now;
+            task.fn();
         }
     }
-#endif
-
     Core::serviceWatchdog();
-    delay(1);
+    Hal::delayMs(1);
 }
 
 void applyRuntimeConfig() {

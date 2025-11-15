@@ -20,6 +20,20 @@ static Control::DriveController driveController;
 static Config::RuntimeConfig runtimeConfig = Config::makeDefaultConfig();
 static Comms::SlaveEndpoint slaveEndpoint;
 
+struct Task {
+    void (*fn)();
+    std::uint32_t intervalMs;
+    std::uint32_t lastRunMs;
+};
+
+void taskServiceLink();
+void taskControlLoop();
+
+Task tasks[] = {
+    {taskServiceLink, 5, 0},
+    {taskControlLoop, 5, 0},
+};
+
 void setup() {
     Serial.begin(115200);
     Serial.println(F("[BOOT] TankRC slave starting..."));
@@ -31,8 +45,22 @@ void setup() {
     Serial.println(F("[BOOT] Slave ready. Waiting for master commands."));
 }
 
-void loop() {
+void taskServiceLink() {
     slaveEndpoint.loop();
+}
+
+void taskControlLoop() {
+    // Placeholder for any additional housekeeping if needed later.
+}
+
+void loop() {
+    const std::uint32_t now = Hal::millis32();
+    for (auto& task : tasks) {
+        if (now - task.lastRunMs >= task.intervalMs) {
+            task.lastRunMs = now;
+            task.fn();
+        }
+    }
     Core::serviceWatchdog();
-    delay(1);
+    Hal::delayMs(1);
 }

@@ -43,7 +43,7 @@ void SlaveEndpoint::loop() {
         processByte(byte);
     }
 
-    const unsigned long now = millis();
+    const unsigned long now = Hal::millis32();
     if ((now - lastCommandMs_) > kCommandTimeoutMs) {
         currentCommand_ = {};
         lightingInput_ = {};
@@ -156,7 +156,7 @@ void SlaveEndpoint::handleCommand(const SlaveProtocol::CommandPayload& payload) 
     lightingInput_.rcConnected = (payload.lighting.flags & SlaveProtocol::LightingRcLinked) != 0;
     lightingInput_.wifiConnected = (payload.lighting.flags & SlaveProtocol::LightingWifiLinked) != 0;
     lightingEnabled_ = (payload.lighting.flags & SlaveProtocol::LightingEnabled) != 0;
-    lastCommandMs_ = millis();
+    lastCommandMs_ = Hal::millis32();
 }
 
 void SlaveEndpoint::sendStatus() {
