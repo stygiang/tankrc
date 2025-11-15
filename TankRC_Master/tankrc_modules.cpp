@@ -18,6 +18,7 @@
 #include "control/drive_controller.cpp"
 #include "drivers/rc_receiver.cpp"
 #include "features/sound_fx.cpp"
+#include "hal/hal.cpp"
 #if TANKRC_ENABLE_NETWORK
 #include "logging/session_logger.cpp"
 #include "network/control_server.cpp"

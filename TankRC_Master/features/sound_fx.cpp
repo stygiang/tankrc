@@ -1,13 +1,10 @@
-#include <Arduino.h>
-
 #include "features/sound_fx.h"
+#include "hal/hal.h"
 
 namespace TankRC::Features {
 void SoundFx::begin(int pin) {
     pin_ = pin;
-    if (pin_ >= 0) {
-        pinMode(pin_, OUTPUT);
-    }
+    Hal::setSpeakerPin(pin_);
 }
 
 void SoundFx::setFeatureEnabled(bool enabled) {
@@ -22,12 +19,7 @@ void SoundFx::update(bool requestedState) {
         return;
     }
 
-    if (!featureEnabled_) {
-        analogWrite(pin_, 0);
-        return;
-    }
-
-    // Simple placeholder rumble tone.
-    analogWrite(pin_, requestedState ? 128 : 0);
+    const bool active = featureEnabled_ && requestedState;
+    Hal::writeSpeakerLevel(active ? 128 : 0);
 }
 }  // namespace TankRC::Features

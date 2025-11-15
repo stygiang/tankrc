@@ -2,6 +2,7 @@
 #include <algorithm>
 
 #include "comms/radio_link.h"
+#include "hal/hal.h"
 
 namespace TankRC::Comms {
 namespace {
@@ -25,13 +26,11 @@ float toZeroOne(float value) {
 }  // namespace
 
 void RadioLink::begin(const Config::RuntimeConfig& config) {
-    rcConfig_ = config.rc;
-    receiver_.begin(rcConfig_.channelPins, Drivers::RcReceiver::kChannelCount);
 }
 
 CommandPacket RadioLink::poll() {
     CommandPacket packet{};
-    const auto frame = receiver_.readFrame();
+    const auto frame = Hal::readRcFrame();
 
     packet.drive.turn = clampRange(frame.normalized[0]);
     packet.drive.throttle = clampRange(frame.normalized[1]);

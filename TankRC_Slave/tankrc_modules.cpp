@@ -10,4 +10,5 @@
 #include "drivers/motor_driver.cpp"
 #include "drivers/pca9685.cpp"
 #include "features/lighting.cpp"
+#include "hal/hal.cpp"
 #endif

@@ -13,11 +13,9 @@ constexpr unsigned long kStatusIntervalMs = 100;
 
 void SlaveEndpoint::begin(Config::RuntimeConfig* config,
                           Control::DriveController* drive,
-                          Features::Lighting* lighting,
                           HardwareSerial* serial) {
     config_ = config;
     drive_ = drive;
-    lighting_ = lighting;
     serial_ = serial ? serial : &Serial1;
     if (serial_) {
         rxPin_ = config_->pins.slaveRx;
@@ -28,16 +26,10 @@ void SlaveEndpoint::begin(Config::RuntimeConfig* config,
             serial_->begin(921600);
         }
     }
-    if (config_) {
-        if (drive_) {
-            drive_->begin(*config_);
-        }
-        if (lighting_) {
-            lighting_->begin(*config_);
-            lightingEnabled_ = config_->features.lightingEnabled;
-            lighting_->setFeatureEnabled(lightingEnabled_);
-        }
+    if (config_ && drive_) {
+        drive_->begin(*config_);
     }
+    lightingEnabled_ = config_ ? config_->features.lightingEnabled : false;
     resetParser();
 }
 
@@ -60,11 +52,8 @@ void SlaveEndpoint::loop() {
 
     drive_->setCommand(currentCommand_);
     drive_->update();
-
-    if (lighting_) {
-        lighting_->setFeatureEnabled(lightingEnabled_);
-        lighting_->update(lightingInput_);
-    }
+    Hal::setLightingEnabled(lightingEnabled_);
+    Hal::updateLighting(lightingInput_);
 
     if ((now - lastStatusMs_) >= kStatusIntervalMs) {
         sendStatus();
@@ -148,13 +137,10 @@ void SlaveEndpoint::handleConfig(const SlaveProtocol::ConfigPayload& payload) {
             }
         }
     }
+    Hal::applyConfig(*config_);
+    lightingEnabled_ = config_->features.lightingEnabled;
     if (drive_) {
         drive_->begin(*config_);
-    }
-    if (lighting_) {
-        lighting_->begin(*config_);
-        lightingEnabled_ = config_->features.lightingEnabled;
-        lighting_->setFeatureEnabled(lightingEnabled_);
     }
 }
 

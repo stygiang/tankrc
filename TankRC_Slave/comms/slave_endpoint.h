@@ -9,7 +9,7 @@
 #include "comms/drive_types.h"
 #include "comms/slave_protocol.h"
 #include "config/runtime_config.h"
-#include "features/lighting.h"
+#include "hal/hal.h"
 
 namespace TankRC::Control {
 class DriveController;
@@ -20,7 +20,6 @@ class SlaveEndpoint {
   public:
     void begin(Config::RuntimeConfig* config,
                Control::DriveController* drive,
-               Features::Lighting* lighting,
                HardwareSerial* serial = &Serial1);
     void loop();
 
@@ -36,7 +35,6 @@ class SlaveEndpoint {
 
     Config::RuntimeConfig* config_ = nullptr;
     Control::DriveController* drive_ = nullptr;
-    Features::Lighting* lighting_ = nullptr;
     HardwareSerial* serial_ = nullptr;
     ParseState state_ = ParseState::Magic;
     std::uint8_t currentType_ = 0;

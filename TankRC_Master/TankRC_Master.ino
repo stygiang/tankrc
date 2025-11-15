@@ -53,6 +53,7 @@ void setup() {
         Serial.println(F("[BOOT] Loaded existing config"));
     }
 
+    Hal::begin(runtimeConfig);
     applyRuntimeConfig();
     Serial.println(F("[BOOT] Runtime config applied"));
 
@@ -190,6 +191,7 @@ void applyRuntimeConfig() {
         wifiManager.applyConfig(runtimeConfig);
     }
 #endif
+    Hal::applyConfig(runtimeConfig);
     driveController.begin(runtimeConfig);
 
     sound.begin(runtimeConfig.pins.speaker);

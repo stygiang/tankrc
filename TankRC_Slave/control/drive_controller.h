@@ -15,8 +15,7 @@
 #include "comms/slave_link.h"
 #else
 #include "control/pid.h"
-#include "drivers/battery_monitor.h"
-#include "drivers/motor_driver.h"
+#include "hal/hal.h"
 #endif
 
 namespace TankRC::Control {
@@ -33,9 +32,6 @@ class DriveController {
 #if TANKRC_USE_DRIVE_PROXY
     Comms::SlaveLink slave_;
 #else
-    Drivers::MotorDriver leftMotor_{};
-    Drivers::MotorDriver rightMotor_{};
-    Drivers::BatteryMonitor battery_{};
     PID leftPid_{};
     PID rightPid_{};
     unsigned long lastUpdateMs_ = 0UL;

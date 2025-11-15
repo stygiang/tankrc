@@ -4,6 +4,7 @@
 #include "config/runtime_config.h"
 #include "config/settings.h"
 #include "core/system_init.h"
+#include "hal/hal.h"
 #include "comms/slave_link.h"
 #include "comms/radio_link.h"
 #include "control/drive_controller.h"

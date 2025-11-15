@@ -3,7 +3,6 @@
 #define TANKRC_COMMS_RADIO_LINK_H
 
 #include "config/runtime_config.h"
-#include "drivers/rc_receiver.h"
 
 namespace TankRC::Comms {
 struct DriveCommand {
@@ -32,8 +31,6 @@ class RadioLink {
     CommandPacket poll();
 
   private:
-    Drivers::RcReceiver receiver_{};
-    Config::RcConfig rcConfig_{};
 };
 }  // namespace TankRC::Comms
 #endif  // TANKRC_COMMS_RADIO_LINK_H

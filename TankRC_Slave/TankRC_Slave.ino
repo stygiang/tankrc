@@ -12,12 +12,12 @@
 
 #include "TankRC.h"
 #include "comms/slave_endpoint.h"
+#include "hal/hal.h"
 
 using namespace TankRC;
 
 static Control::DriveController driveController;
 static Config::RuntimeConfig runtimeConfig = Config::makeDefaultConfig();
-static Features::Lighting lighting;
 static Comms::SlaveEndpoint slaveEndpoint;
 
 void setup() {
@@ -26,7 +26,8 @@ void setup() {
 
     Core::setupHardware();
 
-    slaveEndpoint.begin(&runtimeConfig, &driveController, &lighting);
+    Hal::begin(runtimeConfig);
+    slaveEndpoint.begin(&runtimeConfig, &driveController);
     Serial.println(F("[BOOT] Slave ready. Waiting for master commands."));
 }
 
