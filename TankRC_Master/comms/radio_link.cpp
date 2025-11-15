@@ -43,7 +43,6 @@ CommandPacket RadioLink::poll() {
     packet.auxChannel6 = frame.widths[5] > 0 ? toZeroOne(frame.normalized[5]) : 1.0F;
     packet.rcLinked = (frame.widths[0] > 0 || frame.widths[1] > 0);
     packet.wifiConnected = true;
-    packet.btConnected = true;
 
     // Simple defaults: aux button toggles lighting, sound follows mode.
     packet.lightingState = packet.auxButton;

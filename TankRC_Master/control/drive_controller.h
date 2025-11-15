@@ -1,6 +1,7 @@
 #pragma once
 
 #include "comms/radio_link.h"
+#include "comms/slave_protocol.h"
 #include "config/runtime_config.h"
 
 #ifndef TANKRC_USE_DRIVE_PROXY
@@ -11,12 +12,10 @@
 #endif
 #endif
 
-#if TANKRC_USE_DRIVE_PROXY
 #include "comms/slave_link.h"
-#else
-#include "control/pid.h"
-#include "drivers/battery_monitor.h"
-#include "drivers/motor_driver.h"
+
+#if defined(TANKRC_BUILD_MASTER) && !TANKRC_USE_DRIVE_PROXY
+#error "Master firmware requires TANKRC_USE_DRIVE_PROXY=1"
 #endif
 
 namespace TankRC::Control {
@@ -24,21 +23,13 @@ class DriveController {
   public:
     void begin(const Config::RuntimeConfig& config);
     void setCommand(const Comms::DriveCommand& command);
+    void setLightingCommand(const Comms::SlaveProtocol::LightingCommand& lighting);
     void update();
     float readBatteryVoltage();
 
   private:
     const Config::RuntimeConfig* config_ = nullptr;
     Comms::DriveCommand command_{};
-#if TANKRC_USE_DRIVE_PROXY
     Comms::SlaveLink slave_;
-#else
-    Drivers::MotorDriver leftMotor_{};
-    Drivers::MotorDriver rightMotor_{};
-    Drivers::BatteryMonitor battery_{};
-    PID leftPid_{};
-    PID rightPid_{};
-    unsigned long lastUpdateMs_ = 0UL;
-#endif
 };
 }  // namespace TankRC::Control

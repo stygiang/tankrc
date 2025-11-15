@@ -24,7 +24,6 @@ struct CommandPacket {
     float auxChannel6 = 0.0F;
     bool rcLinked = true;
     bool wifiConnected = true;
-    bool btConnected = true;
 };
 
 class RadioLink {

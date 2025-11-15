@@ -19,7 +19,6 @@ Open a serial monitor at 115200 baud and type `help` to launch the interactive w
 - Reassign any motor/feature pins without recompiling (`wizard pins`), then save them to flash.
 - Enable/disable feature modules (`wizard features`), useful when hardware isn't installed yet.
 - Run the bundled test suite (`wizard test`) to sweep the tank drive, blink the light bar, pulse the speaker, and read battery voltage before heading into the field.
-- Prefer to configure wirelessly? Pair with the built-in Bluetooth SPP console (`TankRC Console`, 115200 baud equivalent). Once connected you get the exact same wizard/command experience as USB—every prompt and log entry is mirrored over Bluetooth, and lighting status now shows Bluetooth link state. Disable it by defining `TANKRC_ENABLE_BLUETOOTH=0` if flash/heap is tight.
 - Configure the UART bridge to your drive slave (`slave_tx` / `slave_rx` tokens or through the pin wizard). By default the master uses TX=17, RX=16; cross them to the slave ESP32 and share ground so the master can stream drive commands + configuration downstream.
 
 Settings survive power cycles via the on-board NVS/Preferences store, and you can revert to defaults anytime with the `defaults` command.
@@ -40,7 +39,7 @@ Four RGB assemblies (front-left/right headlights and rear-left/right reverse lig
 - **Auto turn signals:** Steering left/right past a threshold starts a timed amber blink on the corresponding side.
 - **Reverse lights:** Rear lights flip to bright white automatically while backing up.
 - **Hazard mode:** CH3 up (or a configured sensor fault) triggers a double-blink pattern on both turn signals + rear lights.
-- **Connectivity blink codes:** Wi-Fi, RC link, and Bluetooth each trigger their own chase pattern so you can tell which link dropped.
+- **Connectivity blink codes:** Wi-Fi and RC link each trigger their own chase pattern so you can tell which link dropped.
 - **Sensor tinting:** CH5/CH6 (ultrasonic) modulate the headlight color from green (clear) to red (danger) as obstacles get closer.
 
 Address, frequency, RGB channel assignments, and blink behaviors are all editable from the serial wizard so you can match whatever wiring layout you prefer.

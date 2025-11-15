@@ -469,10 +469,6 @@ form input, form select {
             <span>RC Alert Blink</span>
             <label><input type="checkbox" id="blinkRc" /></label>
         </div>
-        <div class="switch-row">
-            <span>Bluetooth Alert Blink</span>
-            <label><input type="checkbox" id="blinkBt" /></label>
-        </div>
         <label>Blink Period (ms)<input type="number" id="blinkPeriod" min="100" max="2000" /></label>
         <div class="switch-row">
             <span>Config Backup</span>
@@ -538,7 +534,6 @@ async function loadConfig(){
         document.getElementById('soundEnabled').checked=cfg.features.sound;
         document.getElementById('blinkWifi').checked=cfg.blink.wifi;
         document.getElementById('blinkRc').checked=cfg.blink.rc;
-        document.getElementById('blinkBt').checked=cfg.blink.bt;
         document.getElementById('blinkPeriod').value=cfg.blink.period;
     }catch(e){console.warn(e);}
 }
@@ -555,7 +550,6 @@ async function submitConfig(evt){
     params.append('soundEnabled',document.getElementById('soundEnabled').checked?'1':'0');
     params.append('blinkWifi',document.getElementById('blinkWifi').checked?'1':'0');
     params.append('blinkRc',document.getElementById('blinkRc').checked?'1':'0');
-    params.append('blinkBt',document.getElementById('blinkBt').checked?'1':'0');
     params.append('blinkPeriod',document.getElementById('blinkPeriod').value);
     const res=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:params.toString()});
     if(res.ok){ alert('Settings updated. Device may reboot/reconnect.'); }
@@ -839,13 +833,6 @@ void ControlServer::handleConfigImport() {
                             changed = true;
                             return true;
                         }
-                        if (blinkKey == "bt") {
-                            bool val = false;
-                            if (!parser.parseBool(val)) return false;
-                            config_->lighting.blink.bt = val;
-                            changed = true;
-                            return true;
-                        }
                         if (blinkKey == "period") {
                             int period = 0;
                             if (!parser.parseInt(period)) return false;
@@ -1103,13 +1090,6 @@ void ControlServer::handleConfigPost() {
             changed = true;
         }
     }
-    if (server_.hasArg("blinkBt")) {
-        const bool val = server_.arg("blinkBt") == "1";
-        if (config_->lighting.blink.bt != val) {
-            config_->lighting.blink.bt = val;
-            changed = true;
-        }
-    }
     if (server_.hasArg("blinkPeriod")) {
         const int val = server_.arg("blinkPeriod").toInt();
         if (val > 0 && val != config_->lighting.blink.periodMs) {
@@ -1199,7 +1179,6 @@ String ControlServer::buildStatusJson() const {
     json += "\"modeClass\":\"" + modeClass(state_.mode) + "\",";
     json += "\"rcLink\":" + String(state_.rcLinked ? 1 : 0) + ',';
     json += "\"wifiLink\":" + String(state_.wifiLinked ? 1 : 0) + ',';
-    json += "\"btLink\":" + String(state_.btLinked ? 1 : 0) + ',';
     json += "\"ultraLeft\":" + String(state_.ultrasonicLeft, 3) + ',';
     json += "\"ultraRight\":" + String(state_.ultrasonicRight, 3) + ',';
     json += "\"ip\":\"" + escapeJson(wifi_ ? wifi_->ipAddress() : String("")) + "\",";
@@ -1245,7 +1224,6 @@ String ControlServer::buildConfigJson(bool includeSensitive) const {
     json += "\"blink\":{";
     json += "\"wifi\":" + String(config_->lighting.blink.wifi ? 1 : 0) + ",";
     json += "\"rc\":" + String(config_->lighting.blink.rc ? 1 : 0) + ",";
-    json += "\"bt\":" + String(config_->lighting.blink.bt ? 1 : 0) + ",";
     json += "\"period\":" + String(config_->lighting.blink.periodMs);
     json += "}";
     json += "},";

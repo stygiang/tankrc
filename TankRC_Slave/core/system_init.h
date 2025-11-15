@@ -1,1 +1,6 @@
-../TankRC_Master/core/system_init.h
+#pragma once
+
+namespace TankRC::Core {
+void setupHardware();
+void serviceWatchdog();
+}  // namespace TankRC::Core

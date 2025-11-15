@@ -9,7 +9,14 @@
 
 namespace TankRC::Comms::SlaveProtocol {
 constexpr std::uint8_t kMagic = 0xA5;
-constexpr std::size_t kMaxPayload = 96;
+constexpr std::size_t kMaxPayload = 128;
+
+enum LightingFlags : std::uint8_t {
+    LightingHazard = 1 << 0,
+    LightingEnabled = 1 << 1,
+    LightingRcLinked = 1 << 2,
+    LightingWifiLinked = 1 << 3,
+};
 
 enum class FrameType : std::uint8_t {
     Config = 0x01,
@@ -18,9 +25,17 @@ enum class FrameType : std::uint8_t {
 };
 
 #pragma pack(push, 1)
+struct LightingCommand {
+    float ultrasonicLeft = 1.0F;
+    float ultrasonicRight = 1.0F;
+    std::uint8_t status = 0;
+    std::uint8_t flags = 0;
+};
+
 struct CommandPayload {
     float throttle = 0.0F;
     float turn = 0.0F;
+    LightingCommand lighting{};
 };
 
 struct StatusPayload {
@@ -29,6 +44,8 @@ struct StatusPayload {
 
 struct ConfigPayload {
     Config::PinAssignments pins{};
+    Config::FeatureConfig features{};
+    Config::LightingConfig lighting{};
 };
 #pragma pack(pop)
 

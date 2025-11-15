@@ -5,7 +5,7 @@
 #include <cstdint>
 
 namespace TankRC::Config {
-constexpr std::uint32_t kConfigVersion = 5;
+constexpr std::uint32_t kConfigVersion = 6;
 
 struct ChannelPins {
     int pwm = -1;
@@ -96,5 +96,6 @@ struct RuntimeConfig {
 };
 
 RuntimeConfig makeDefaultConfig();
+bool migrateConfig(RuntimeConfig& config, std::uint32_t fromVersion);
 }  // namespace TankRC::Config
 #endif  // TANKRC_CONFIG_RUNTIME_CONFIG_H

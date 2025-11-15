@@ -8,4 +8,6 @@
 #include "control/pid.cpp"
 #include "drivers/battery_monitor.cpp"
 #include "drivers/motor_driver.cpp"
+#include "drivers/pca9685.cpp"
+#include "features/lighting.cpp"
 #endif

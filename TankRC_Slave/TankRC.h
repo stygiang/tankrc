@@ -7,3 +7,4 @@
 #include "control/drive_controller.h"
 #include "drivers/battery_monitor.h"
 #include "drivers/motor_driver.h"
+#include "features/lighting.h"

@@ -17,8 +17,6 @@ constexpr Color kStatusDebug{0, 120, 255};
 constexpr Color kStatusActive{255, 0, 0};
 constexpr Color kStatusLocked{255, 0, 0};
 constexpr Color kWifiColor{0, 180, 255};
-constexpr Color kBtFrontColor{0, 255, 180};
-constexpr Color kBtRearColor{180, 0, 255};
 constexpr Color kOff{0, 0, 0};
 
 Color chooseModeColor(Comms::RcStatusMode mode) {
@@ -170,14 +168,12 @@ bool Lighting::applyHazardPattern(const LightingInput& input) {
 }
 
 bool Lighting::applyConnectionPattern(const LightingInput& input) {
-    enum class Alert { None, Rc, Wifi, Bt };
+    enum class Alert { None, Rc, Wifi };
     Alert alert = Alert::None;
     if (config_.blink.rc && !input.rcConnected) {
         alert = Alert::Rc;
     } else if (config_.blink.wifi && !input.wifiConnected) {
         alert = Alert::Wifi;
-    } else if (config_.blink.bt && !input.btConnected) {
-        alert = Alert::Bt;
     }
     if (alert == Alert::None) {
         alertPhase_ = 0;
@@ -211,12 +207,6 @@ bool Lighting::applyConnectionPattern(const LightingInput& input) {
             const Color active = kWifiColor;
             frontLeft = frontRight = frontOn ? active : kOff;
             rearLeft = rearRight = frontOn ? kOff : active;
-            break;
-        }
-        case Alert::Bt: {
-            const bool frontPhase = (alertPhase_ % 2 == 0);
-            frontLeft = frontRight = frontPhase ? kBtFrontColor : kOff;
-            rearLeft = rearRight = frontPhase ? kOff : kBtRearColor;
             break;
         }
         default:

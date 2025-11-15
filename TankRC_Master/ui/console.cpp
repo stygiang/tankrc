@@ -5,11 +5,9 @@
 #include <iterator>
 #include <vector>
 
-#include "comms/bluetooth_console.h"
 #include "comms/radio_link.h"
 #include "control/drive_controller.h"
 #include "drivers/rc_receiver.h"
-#include "features/lighting.h"
 #include "features/sound_fx.h"
 #include "ui/console.h"
 
@@ -136,14 +134,8 @@ String readLineBlocking() {
                 wizardInputBuffer_.clear();
                 return ready;
             }
-            if (ctx_.bluetooth) {
-                ctx_.bluetooth->loop();
-            }
         }
         delay(10);
-        if (ctx_.bluetooth) {
-            ctx_.bluetooth->loop();
-        }
     }
 }
 
@@ -267,10 +259,9 @@ void showConfig() {
     printRgb("Front Right", ctx_.config->lighting.channels.frontRight);
     printRgb("Rear Left", ctx_.config->lighting.channels.rearLeft);
     printRgb("Rear Right", ctx_.config->lighting.channels.rearRight);
-    console.printf("Blink wifi:%s rc:%s bt:%s period:%ums\n",
+    console.printf("Blink wifi:%s rc:%s period:%ums\n",
                   ctx_.config->lighting.blink.wifi ? "on" : "off",
                   ctx_.config->lighting.blink.rc ? "on" : "off",
-                  ctx_.config->lighting.blink.bt ? "on" : "off",
                   ctx_.config->lighting.blink.periodMs);
 
     console.println(F("--- Feature Flags ---"));
@@ -436,8 +427,6 @@ void configureLighting(Config::LightingConfig& lighting) {
     lighting.blink.wifi = promptBool("Blink when WiFi disconnected", lighting.blink.wifi);
     if (wizardAbortRequested_) return;
     lighting.blink.rc = promptBool("Blink when RC link lost", lighting.blink.rc);
-    if (wizardAbortRequested_) return;
-    lighting.blink.bt = promptBool("Blink when Bluetooth disconnected", lighting.blink.bt);
     if (wizardAbortRequested_) return;
     lighting.blink.periodMs = static_cast<std::uint16_t>(promptInt("Blink period (ms)", lighting.blink.periodMs));
 }
@@ -738,29 +727,6 @@ void runMotorTest() {
     console.println(F("Motor test complete."));
 }
 
-void runLightingTest() {
-    if (!ctx_.lighting) {
-        console.println(F("Lighting controller unavailable."));
-        return;
-    }
-    console.println(F("Blinking light bar (6 cycles)."));
-    Features::LightingInput input{};
-    input.wifiConnected = true;
-    input.rcConnected = true;
-    input.btConnected = true;
-    input.ultrasonicLeft = 0.4F;
-    input.ultrasonicRight = 0.9F;
-    for (int i = 0; i < 6; ++i) {
-        input.steering = 0.8F;
-        ctx_.lighting->update(input);
-        delay(200);
-        input.steering = -0.8F;
-        ctx_.lighting->update(input);
-        delay(200);
-    }
-    console.println(F("Lighting test complete."));
-}
-
 void runSoundTest() {
     if (!ctx_.sound) {
         console.println(F("Sound controller unavailable."));
@@ -795,9 +761,8 @@ void runTestWizard() {
         console.println();
         console.println(F("=== Test Wizard ==="));
         console.println(F("1) Tank drive sweep"));
-        console.println(F("2) Lighting blink"));
-        console.println(F("3) Sound pulse"));
-        console.println(F("4) Battery voltage read"));
+        console.println(F("2) Sound pulse"));
+        console.println(F("3) Battery voltage read"));
         console.println(F("0) Exit test wizard"));
         const int choice = promptInt("Select option", 0);
         switch (choice) {
@@ -805,12 +770,9 @@ void runTestWizard() {
                 runMotorTest();
                 break;
             case 2:
-                runLightingTest();
-                break;
-            case 3:
                 runSoundTest();
                 break;
-            case 4:
+            case 3:
                 runBatteryTest();
                 break;
             case 0:

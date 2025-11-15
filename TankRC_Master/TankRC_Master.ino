@@ -6,10 +6,6 @@
 #define TANKRC_ENABLE_NETWORK 0
 #endif
 
-#ifndef TANKRC_ENABLE_BLUETOOTH
-#define TANKRC_ENABLE_BLUETOOTH 1
-#endif
-
 #ifndef TANKRC_USE_DRIVE_PROXY
 #define TANKRC_USE_DRIVE_PROXY 1
 #endif
@@ -23,14 +19,10 @@
 using namespace TankRC;
 
 static Control::DriveController driveController;
-static Features::Lighting lighting;
 static Features::SoundFx sound;
 static Comms::RadioLink radio;
 static Config::RuntimeConfig runtimeConfig = Config::makeDefaultConfig();
 static Storage::ConfigStore configStore;
-#if TANKRC_ENABLE_BLUETOOTH
-static Comms::BluetoothConsole bluetoothConsole;
-#endif
 #if TANKRC_ENABLE_NETWORK
 static Network::WifiManager wifiManager;
 static Network::ControlServer controlServer;
@@ -68,23 +60,12 @@ void setup() {
         .config = &runtimeConfig,
         .store = &configStore,
         .drive = &driveController,
-        .lighting = &lighting,
         .sound = &sound,
-#if TANKRC_ENABLE_BLUETOOTH
-        .bluetooth = &bluetoothConsole,
-#endif
     };
     UI::begin(uiContext, applyRuntimeConfig);
     Serial.println(F("[BOOT] Serial UI ready"));
 #if TANKRC_USE_DRIVE_PROXY
     Serial.println(F("[BOOT] Drive controller proxy enabled (UART link to slave)."));
-#endif
-
-#if TANKRC_ENABLE_BLUETOOTH
-    bluetoothConsole.begin(runtimeConfig);
-    Serial.println(F("[BOOT] Bluetooth console ready (SPP)"));
-#else
-    Serial.println(F("[BOOT] Bluetooth console disabled (TANKRC_ENABLE_BLUETOOTH=0)"));
 #endif
 
 #if TANKRC_ENABLE_NETWORK
@@ -104,9 +85,6 @@ void loop() {
     controlServer.loop();
     remoteConsole.loop();
 #endif
-#if TANKRC_ENABLE_BLUETOOTH
-    bluetoothConsole.loop();
-#endif
     UI::update();
 
     if (UI::isWizardActive()) {
@@ -115,9 +93,6 @@ void loop() {
     }
 
     auto packet = radio.poll();
-#if TANKRC_ENABLE_BLUETOOTH
-    packet.btConnected = bluetoothConsole.connected();
-#endif
 #if TANKRC_ENABLE_NETWORK
     packet.wifiConnected = wifiManager.isConnected() && !wifiManager.isApMode();
     const auto overrides = controlServer.getOverrides();
@@ -143,27 +118,32 @@ void loop() {
     }
 
     driveController.setCommand(driveCommand);
-    driveController.update();
 
+    Comms::SlaveProtocol::LightingCommand lightingCommand{};
+    lightingCommand.ultrasonicLeft = packet.auxChannel5;
+    lightingCommand.ultrasonicRight = packet.auxChannel6;
+    lightingCommand.status = static_cast<std::uint8_t>(packet.status);
+    if (packet.hazard) {
+        lightingCommand.flags |= Comms::SlaveProtocol::LightingHazard;
+    }
+    if (packet.rcLinked) {
+        lightingCommand.flags |= Comms::SlaveProtocol::LightingRcLinked;
+    }
+    if (packet.wifiConnected) {
+        lightingCommand.flags |= Comms::SlaveProtocol::LightingWifiLinked;
+    }
     const bool outputsEnabled = packet.status != Comms::RcStatusMode::Locked;
-
-    Features::LightingInput lightingInput{};
-    lightingInput.steering = driveCommand.turn;
-    lightingInput.throttle = driveCommand.throttle;
-    lightingInput.rcConnected = packet.rcLinked;
-    lightingInput.wifiConnected = packet.wifiConnected;
-    lightingInput.btConnected = packet.btConnected;
-    lightingInput.status = packet.status;
-    lightingInput.hazard = packet.hazard;
-    lightingInput.ultrasonicLeft = packet.auxChannel5;
-    lightingInput.ultrasonicRight = packet.auxChannel6;
 
     const bool lightingInstalled = runtimeConfig.features.lightingEnabled;
     const bool hazardActive = lightingInstalled && packet.hazard;
     const bool lightEnable = lightingInstalled && outputsEnabled && packet.lightingState;
     const bool lightingEffective = lightEnable || hazardActive;
-    lighting.setFeatureEnabled(lightingEffective);
-    lighting.update(lightingInput);
+    if (lightingEffective) {
+        lightingCommand.flags |= Comms::SlaveProtocol::LightingEnabled;
+    }
+
+    driveController.setLightingCommand(lightingCommand);
+    driveController.update();
 
     sound.update(outputsEnabled && packet.soundState);
 
@@ -176,7 +156,6 @@ void loop() {
     state.mode = packet.status;
     state.rcLinked = packet.rcLinked;
     state.wifiLinked = packet.wifiConnected;
-    state.btLinked = packet.btConnected;
     state.ultrasonicLeft = packet.auxChannel5;
     state.ultrasonicRight = packet.auxChannel6;
     state.serverTime = ntpClock.now();
@@ -212,8 +191,6 @@ void applyRuntimeConfig() {
     }
 #endif
     driveController.begin(runtimeConfig);
-    lighting.begin(runtimeConfig);
-    lighting.setFeatureEnabled(runtimeConfig.features.lightingEnabled);
 
     sound.begin(runtimeConfig.pins.speaker);
     sound.setFeatureEnabled(runtimeConfig.features.soundEnabled);

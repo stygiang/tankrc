@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include "comms/radio_link.h"
+#include "comms/drive_types.h"
 #include "config/runtime_config.h"
 #include "drivers/pca9685.h"
 
@@ -18,7 +18,6 @@ struct LightingInput {
     float throttle = 0.0F;
     bool rcConnected = true;
     bool wifiConnected = true;
-    bool btConnected = true;
     bool hazard = false;
     float ultrasonicLeft = 1.0F;
     float ultrasonicRight = 1.0F;

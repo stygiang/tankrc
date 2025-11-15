@@ -17,6 +17,7 @@ class SlaveLink {
     void begin(const Config::RuntimeConfig& config);
     void applyConfig(const Config::RuntimeConfig& config);
     void setCommand(const DriveCommand& command);
+    void setLightingCommand(const SlaveProtocol::LightingCommand& lighting);
     void update();
 
     float batteryVoltage() const { return lastStatus_.batteryVoltage; }
@@ -34,6 +35,7 @@ class SlaveLink {
     int rxPin_ = 16;
     int txPin_ = 17;
     DriveCommand command_{};
+    SlaveProtocol::LightingCommand lighting_{};
     bool commandDirty_ = false;
     unsigned long lastSendMs_ = 0;
     unsigned long lastStatusMs_ = 0;

@@ -17,7 +17,6 @@ struct ControlState {
     Comms::RcStatusMode mode = Comms::RcStatusMode::Active;
     bool rcLinked = true;
     bool wifiLinked = true;
-    bool btLinked = true;
     float ultrasonicLeft = 1.0F;
     float ultrasonicRight = 1.0F;
     std::uint32_t serverTime = 0;

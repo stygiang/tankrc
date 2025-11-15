@@ -24,6 +24,8 @@ void SlaveLink::begin(const Config::RuntimeConfig& config) {
 void SlaveLink::applyConfig(const Config::RuntimeConfig& config) {
     SlaveProtocol::ConfigPayload payload{};
     payload.pins = config.pins;
+    payload.features = config.features;
+    payload.lighting = config.lighting;
     sendFrame(SlaveProtocol::FrameType::Config,
               reinterpret_cast<const std::uint8_t*>(&payload),
               sizeof(payload));
@@ -31,6 +33,11 @@ void SlaveLink::applyConfig(const Config::RuntimeConfig& config) {
 
 void SlaveLink::setCommand(const DriveCommand& command) {
     command_ = command;
+    commandDirty_ = true;
+}
+
+void SlaveLink::setLightingCommand(const SlaveProtocol::LightingCommand& lighting) {
+    lighting_ = lighting;
     commandDirty_ = true;
 }
 
@@ -52,6 +59,7 @@ void SlaveLink::sendCommand() {
     SlaveProtocol::CommandPayload payload{};
     payload.throttle = command_.throttle;
     payload.turn = command_.turn;
+    payload.lighting = lighting_;
     sendFrame(SlaveProtocol::FrameType::Command,
               reinterpret_cast<const std::uint8_t*>(&payload),
               sizeof(payload));

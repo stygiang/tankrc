@@ -12,31 +12,22 @@
 #endif
 #if TANKRC_BUILD_MASTER
 #include "core/system_init.cpp"
-#include "comms/bluetooth_console.cpp"
 #include "comms/radio_link.cpp"
 #include "comms/slave_link.cpp"
 #include "config/runtime_config.cpp"
 #include "control/drive_controller.cpp"
-#include "drivers/pca9685.cpp"
 #include "drivers/rc_receiver.cpp"
-#include "features/lighting.cpp"
 #include "features/sound_fx.cpp"
+#if TANKRC_ENABLE_NETWORK
 #include "logging/session_logger.cpp"
 #include "network/control_server.cpp"
 #include "network/remote_console.cpp"
 #include "network/wifi_manager.cpp"
-#include "storage/config_store.cpp"
 #include "time/ntp_clock.cpp"
+#endif
+#include "storage/config_store.cpp"
 #include "ui/console.cpp"
-#elif TANKRC_BUILD_SLAVE
-#include "core/system_init.cpp"
-#include "comms/slave_endpoint.cpp"
-#include "config/runtime_config.cpp"
-#include "control/drive_controller.cpp"
-#include "control/pid.cpp"
-#include "drivers/battery_monitor.cpp"
-#include "drivers/motor_driver.cpp"
 #else
-#error "Define TANKRC_BUILD_MASTER or TANKRC_BUILD_SLAVE"
+#error "Define TANKRC_BUILD_MASTER"
 #endif
 #endif

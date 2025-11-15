@@ -6,10 +6,6 @@
 #define TANKRC_ENABLE_NETWORK 0
 #endif
 
-#ifndef TANKRC_ENABLE_BLUETOOTH
-#define TANKRC_ENABLE_BLUETOOTH 0
-#endif
-
 #ifndef TANKRC_USE_DRIVE_PROXY
 #define TANKRC_USE_DRIVE_PROXY 0
 #endif
@@ -21,6 +17,7 @@ using namespace TankRC;
 
 static Control::DriveController driveController;
 static Config::RuntimeConfig runtimeConfig = Config::makeDefaultConfig();
+static Features::Lighting lighting;
 static Comms::SlaveEndpoint slaveEndpoint;
 
 void setup() {
@@ -29,7 +26,7 @@ void setup() {
 
     Core::setupHardware();
 
-    slaveEndpoint.begin(&runtimeConfig, &driveController);
+    slaveEndpoint.begin(&runtimeConfig, &driveController, &lighting);
     Serial.println(F("[BOOT] Slave ready. Waiting for master commands."));
 }
 
