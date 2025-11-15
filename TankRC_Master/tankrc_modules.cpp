@@ -19,6 +19,7 @@
 #include "drivers/rc_receiver.cpp"
 #include "features/sound_fx.cpp"
 #include "hal/hal.cpp"
+#include "health/health.cpp"
 #include "../events/event_bus.cpp"
 #if TANKRC_ENABLE_NETWORK
 #include "logging/session_logger.cpp"

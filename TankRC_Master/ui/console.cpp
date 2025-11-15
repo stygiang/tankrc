@@ -271,6 +271,8 @@ void showConfig() {
     console.printf("Wi-Fi enabled: %s\n", features.wifiEnabled ? "yes" : "no");
     console.printf("Ultrasonic enabled: %s\n", features.ultrasonicEnabled ? "yes" : "no");
     console.printf("Tip-over enabled: %s\n", features.tipOverEnabled ? "yes" : "no");
+    const auto& health = Health::getStatus();
+    console.printf("Health: %s (%s)\n", Health::toString(health.code), health.message);
     console.println();
 }
 

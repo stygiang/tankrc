@@ -4,6 +4,7 @@
 
 #include "comms/radio_link.h"
 #include "config/runtime_config.h"
+#include "health/health.h"
 #include "logging/session_logger.h"
 #include "network/wifi_manager.h"
 #include "storage/config_store.h"

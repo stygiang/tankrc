@@ -3,6 +3,7 @@
 #include "config/settings.h"
 #include "control/drive_controller.h"
 #include "events/event_bus.h"
+#include "health/health.h"
 
 namespace TankRC::Control {
 #if !TANKRC_USE_DRIVE_PROXY
@@ -62,11 +63,15 @@ void DriveController::update() {
         if (!batteryLowNotified) {
             batteryLowNotified = true;
             Events::publish({Events::EventType::LowBattery, Hal::millis32(), 0, voltage});
+            Health::setStatus(Health::HealthCode::LowBattery, "Battery low");
         }
         Hal::stopMotors();
     } else if (batteryLowNotified && voltage > 11.5F) {
         batteryLowNotified = false;
         Events::publish({Events::EventType::BatteryRecovered, Hal::millis32(), 0, voltage});
+        Health::setStatus(Health::HealthCode::Ok, "Battery recovered");
+    } else if (!batteryLowNotified) {
+        Health::setStatus(Health::HealthCode::Ok, "Outputs nominal");
     }
 }
 

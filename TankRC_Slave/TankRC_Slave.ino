@@ -56,6 +56,7 @@ void setup() {
     Core::setupHardware();
 
     Hal::begin(runtimeConfig);
+    Health::setStatus(Health::HealthCode::Ok, "Slave startup");
     Events::subscribe(logEvent);
     slaveEndpoint.begin(&runtimeConfig, &driveController);
     Serial.println(F("[BOOT] Slave ready. Waiting for master commands."));

@@ -1242,6 +1242,8 @@ String ControlServer::buildStatusJson() const {
     json += "\"ap\":\"" + escapeJson(wifi_ ? wifi_->apAddress() : String("")) + "\",";
     json += "\"overrideHazard\":" + String(overrides_.hazardOverride ? 1 : 0) + ',';
     json += "\"overrideLights\":" + String(overrides_.lightsOverride ? 1 : 0) + ",";
+    const auto& health = Health::getStatus();
+    json += "\"health\":{\"code\":" + String(static_cast<int>(health.code)) + ",\"message\":\"" + escapeJson(String(health.message)) + "\",\"ts\":" + String(health.lastChangeMs) + "},";
     json += "\"logCount\":" + String(logger_ ? logger_->size() : 0) + ",";
     json += "\"serverTime\":" + String(state_.serverTime);
     json += "}";

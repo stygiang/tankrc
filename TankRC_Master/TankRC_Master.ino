@@ -60,6 +60,19 @@ Task tasks[] = {
     {taskHousekeeping, 100, 0},
 };
 
+void updateHealthState() {
+    using namespace Health;
+    if (!batteryHealthy) {
+        setStatus(HealthCode::LowBattery, "Battery low");
+    } else if (!rcHealthy) {
+        setStatus(HealthCode::RcSignalLost, "RC link lost");
+    } else if (!wifiHealthy) {
+        setStatus(HealthCode::WifiDisconnected, "Wi-Fi disconnected");
+    } else {
+        setStatus(HealthCode::Ok, "All systems nominal");
+    }
+}
+
 void handleEventLog(const Events::Event& event) {
     Serial.print(F("[EVT] "));
     switch (event.type) {
@@ -105,6 +118,8 @@ void setup() {
     }
 
     Hal::begin(runtimeConfig);
+    rcHealthy = batteryHealthy = wifiHealthy = true;
+    Health::setStatus(Health::HealthCode::Ok, "Startup");
     Events::subscribe(handleEventLog);
     applyRuntimeConfig();
     Serial.println(F("[BOOT] Runtime config applied"));
@@ -148,6 +163,11 @@ static Comms::RcStatusMode lastMode = Comms::RcStatusMode::Active;
 static bool lastRcLinked = true;
 static bool batteryLow = false;
 static float latestBattery = 0.0F;
+static bool rcHealthy = true;
+static bool batteryHealthy = true;
+static bool wifiHealthy = true;
+
+void updateHealthState();
 
 void taskReadInputs() {
     currentPacket = radio.poll();
@@ -175,6 +195,15 @@ void taskReadInputs() {
         Events::publish({Events::EventType::RcSignalRestored, Hal::millis32()});
     }
     lastRcLinked = currentPacket.rcLinked;
+    rcHealthy = currentPacket.rcLinked;
+
+#if TANKRC_ENABLE_NETWORK
+    wifiHealthy = !networkActive || currentPacket.wifiConnected;
+#else
+    wifiHealthy = true;
+#endif
+
+    updateHealthState();
 }
 
 void taskControl() {
@@ -249,6 +278,8 @@ void taskOutputs() {
         batteryLow = false;
         Events::publish({Events::EventType::BatteryRecovered, Hal::millis32(), 0, latestBattery});
     }
+    batteryHealthy = !batteryLow;
+    updateHealthState();
 
 #if TANKRC_ENABLE_NETWORK
     if (networkActive && sessionLogger.enabled()) {
@@ -310,6 +341,7 @@ void applyRuntimeConfig() {
         }
     }
     networkActive = enableWifi;
+    wifiHealthy = !networkActive;
 #endif
     Hal::applyConfig(runtimeConfig);
     driveController.begin(runtimeConfig);
@@ -326,4 +358,5 @@ void applyRuntimeConfig() {
     sessionLogger.configure(runtimeConfig.logging);
 #endif
     lastLogMs = 0;
+    updateHealthState();
 }

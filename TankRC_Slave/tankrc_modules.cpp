@@ -11,5 +11,6 @@
 #include "drivers/pca9685.cpp"
 #include "features/lighting.cpp"
 #include "hal/hal.cpp"
+#include "health/health.cpp"
 #include "events/event_bus.cpp"
 #endif
