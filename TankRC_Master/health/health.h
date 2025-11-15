@@ -1,4 +1,6 @@
 #pragma once
+#ifndef TANKRC_HEALTH_HEALTH_H
+#define TANKRC_HEALTH_HEALTH_H
 
 #include <cstdint>
 
@@ -25,3 +27,5 @@ inline void setStatus(HealthCode code, const char* message) {
 const HealthStatus& getStatus();
 const char* toString(HealthCode code);
 }  // namespace TankRC::Health
+
+#endif  // TANKRC_HEALTH_HEALTH_H

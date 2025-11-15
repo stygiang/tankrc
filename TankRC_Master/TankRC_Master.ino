@@ -42,6 +42,17 @@ static unsigned long lastLogMs = 0UL;
 static unsigned long lastLogMs = 0UL;
 #endif
 
+static Comms::CommandPacket currentPacket{};
+static Comms::SlaveProtocol::LightingCommand pendingLighting{};
+static bool outputsEnabled = false;
+static Comms::RcStatusMode lastMode = Comms::RcStatusMode::Active;
+static bool lastRcLinked = true;
+static bool batteryLow = false;
+static float latestBattery = 0.0F;
+static bool rcHealthy = true;
+static bool batteryHealthy = true;
+static bool wifiHealthy = true;
+
 struct Task {
     void (*fn)();
     std::uint32_t intervalMs;
@@ -155,19 +166,6 @@ void setup() {
     Serial.println(F("[BOOT] Network stack disabled (TANKRC_ENABLE_NETWORK=0)"));
 #endif
 }
-
-static Comms::CommandPacket currentPacket{};
-static Comms::SlaveProtocol::LightingCommand pendingLighting{};
-static bool outputsEnabled = false;
-static Comms::RcStatusMode lastMode = Comms::RcStatusMode::Active;
-static bool lastRcLinked = true;
-static bool batteryLow = false;
-static float latestBattery = 0.0F;
-static bool rcHealthy = true;
-static bool batteryHealthy = true;
-static bool wifiHealthy = true;
-
-void updateHealthState();
 
 void taskReadInputs() {
     currentPacket = radio.poll();
