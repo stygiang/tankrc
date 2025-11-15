@@ -4,6 +4,25 @@
 #include "control/drive_controller.h"
 
 namespace TankRC::Control {
+#if TANKRC_USE_DRIVE_PROXY
+void DriveController::begin(const Config::RuntimeConfig& config) {
+    config_ = &config;
+    slave_.begin(config);
+}
+
+void DriveController::setCommand(const Comms::DriveCommand& command) {
+    command_ = command;
+    slave_.setCommand(command_);
+}
+
+void DriveController::update() {
+    slave_.update();
+}
+
+float DriveController::readBatteryVoltage() {
+    return slave_.batteryVoltage();
+}
+#else
 void DriveController::begin(const Config::RuntimeConfig& config) {
     config_ = &config;
 
@@ -64,4 +83,5 @@ void DriveController::update() {
 float DriveController::readBatteryVoltage() {
     return battery_.readVoltage();
 }
+#endif
 }  // namespace TankRC::Control

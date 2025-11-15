@@ -19,6 +19,8 @@ RuntimeConfig makeDefaultConfig() {
     config.pins.lightBar = Pins::LIGHT_BAR;
     config.pins.speaker = Pins::SPEAKER;
     config.pins.batterySense = Pins::BATTERY_SENSE;
+    config.pins.slaveTx = Pins::SLAVE_UART_TX;
+    config.pins.slaveRx = Pins::SLAVE_UART_RX;
 
     config.features.lightingEnabled = true;
     config.features.soundEnabled = true;

@@ -36,7 +36,7 @@ void RemoteConsole::loop() {
         if (c == '\n') {
             String line = buffer_;
             buffer_.clear();
-            UI::injectRemoteLine(line);
+            UI::injectRemoteLine(line, UI::ConsoleSource::Remote);
         } else {
             buffer_ += c;
         }

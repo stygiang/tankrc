@@ -5,7 +5,7 @@
 #include <cstdint>
 
 namespace TankRC::Config {
-constexpr std::uint32_t kConfigVersion = 4;
+constexpr std::uint32_t kConfigVersion = 5;
 
 struct ChannelPins {
     int pwm = -1;
@@ -25,6 +25,8 @@ struct PinAssignments {
     int lightBar = -1;
     int speaker = -1;
     int batterySense = -1;
+    int slaveTx = -1;
+    int slaveRx = -1;
 };
 
 struct FeatureConfig {

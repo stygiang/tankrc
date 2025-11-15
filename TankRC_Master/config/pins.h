@@ -33,4 +33,6 @@ constexpr int IMU_SCL = 22;
 constexpr int STATUS_LED = 2;
 constexpr int LIGHT_BAR = 15;
 constexpr int SPEAKER = 4;
+constexpr int SLAVE_UART_RX = 16;
+constexpr int SLAVE_UART_TX = 17;
 }  // namespace TankRC::Pins

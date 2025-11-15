@@ -4,7 +4,7 @@ Modular ESP-based tank-style RC platform. This repo focuses on keeping each feat
 
 ## Layout
 - `TankRC_Master/TankRC_Master.ino` – Main ESP (master) sketch that wires up the runtime configuration wizard. Networking is disabled by default; define `TANKRC_ENABLE_NETWORK=1` before including `TankRC.h` (or via `platformio.ini`) to turn on Wi‑Fi/web control.
-- `TankRC_Slave/TankRC_Slave.ino` – Placeholder sketch for the secondary ESP. Drop in the logic you need once you're ready to bring up the second board.
+- `TankRC_Slave/TankRC_Slave.ino` – Drive/motor controller firmware that the master streams commands to over UART. Flash this to the ESP32 that physically hosts the TB6612s and battery monitor.
 - `tankrc_modules.cpp` – Pulls in every module implementation so the Arduino build system compiles the deeper folder structure without extra setup.
 - `TankRC.h`, `config/`, `control/`, `drivers/`, `features/`, `network/`, `logging/`, `time/` – Shared firmware modules (now copied inside `TankRC_Master/` so the Arduino IDE can compile everything from a single sketch folder).
 - `docs/` – System and hardware notes.
@@ -19,6 +19,8 @@ Open a serial monitor at 115200 baud and type `help` to launch the interactive w
 - Reassign any motor/feature pins without recompiling (`wizard pins`), then save them to flash.
 - Enable/disable feature modules (`wizard features`), useful when hardware isn't installed yet.
 - Run the bundled test suite (`wizard test`) to sweep the tank drive, blink the light bar, pulse the speaker, and read battery voltage before heading into the field.
+- Prefer to configure wirelessly? Pair with the built-in Bluetooth SPP console (`TankRC Console`, 115200 baud equivalent). Once connected you get the exact same wizard/command experience as USB—every prompt and log entry is mirrored over Bluetooth, and lighting status now shows Bluetooth link state. Disable it by defining `TANKRC_ENABLE_BLUETOOTH=0` if flash/heap is tight.
+- Configure the UART bridge to your drive slave (`slave_tx` / `slave_rx` tokens or through the pin wizard). By default the master uses TX=17, RX=16; cross them to the slave ESP32 and share ground so the master can stream drive commands + configuration downstream.
 
 Settings survive power cycles via the on-board NVS/Preferences store, and you can revert to defaults anytime with the `defaults` command.
 
@@ -58,10 +60,11 @@ Once the ESP32 joins your Wi-Fi (or exposes its fallback `TankRC-Setup` access p
 Changes saved through the web interface persist via NVS and automatically reconfigure the firmware.
 
 ## Multiple ESP targets
-- **Master ESP**: Build/upload `TankRC_Master/TankRC_Master.ino` (or `pio run -e master`). This sketch drives the full RC stack.
-- **Slave ESP**: Use `TankRC_Slave/TankRC_Slave.ino` as the starting point for your second board. It currently contains empty `setup()/loop()` blocks so you can add behavior incrementally.
+- **Master ESP**: Build/upload `TankRC_Master/TankRC_Master.ino` (or `pio run -e master`). This sketch now proxies the drive loop—motor drivers live on the slave, so the master binary is ~30% lighter and fits comfortably in flash with every feature enabled. Re-run the pin wizard after wiring the slave UART so the master can push pin assignments across.
+- **Slave ESP**: Flash `TankRC_Slave/TankRC_Slave.ino` (or `pio run -e slave`). It boots the original drive controller/motor driver stack, listens for configuration + drive commands over Serial1 (default RX=16, TX=17), and streams battery telemetry back to the master. Keep the link crossed (master TX → slave RX and master RX ← slave TX) plus ground, and the master will automatically resend config data whenever you tweak pins from the wizard.
 - Shared modules live at the repository root (`TankRC.h`, `config/`, etc.), so both sketches can `#include "../../TankRC.h"` and reuse the same codebase.
 
 ### Building
 - **PlatformIO**: `pio run -e master -t upload` (default) or `pio run -e slave -t upload` once the slave sketch is implemented.
 - **Arduino CLI/IDE**: Open the desired sketch folder (`TankRC_Master/` or `TankRC_Slave/`). With the helper script you can run `SKETCH=master ./scripts/build_and_flash.sh /dev/ttyUSB0` (or `SKETCH=slave ...`) to target a specific board.
+  - The slave sketch reuses the master’s sources via symlinks. On platforms without symlink support, copy the shared folders from `TankRC_Master/` into `TankRC_Slave/` before building.

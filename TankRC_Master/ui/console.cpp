@@ -1,9 +1,11 @@
 #include <Arduino.h>
+#include <array>
 #include <cstdint>
 #include <cstdarg>
 #include <iterator>
 #include <vector>
 
+#include "comms/bluetooth_console.h"
 #include "comms/radio_link.h"
 #include "control/drive_controller.h"
 #include "drivers/rc_receiver.h"
@@ -17,15 +19,41 @@ class ConsoleWriter : public Print {
   public:
     size_t write(uint8_t b) override {
         Serial.write(b);
-#if TANKRC_ENABLE_NETWORK
-        if (tap_) {
-            tap_->write(b);
+        for (auto* tap : taps_) {
+            if (tap) {
+                tap->write(b);
+            }
         }
-#endif
         return 1;
     }
 
-    void setTap(Print* tap) { tap_ = tap; }
+    void addTap(Print* tap) {
+        if (!tap) {
+            return;
+        }
+        for (auto* existing : taps_) {
+            if (existing == tap) {
+                return;
+            }
+        }
+        for (auto& slot : taps_) {
+            if (!slot) {
+                slot = tap;
+                return;
+            }
+        }
+    }
+
+    void removeTap(Print* tap) {
+        if (!tap) {
+            return;
+        }
+        for (auto& slot : taps_) {
+            if (slot == tap) {
+                slot = nullptr;
+            }
+        }
+    }
 
     void printPrompt() {
         print(F("> "));
@@ -41,11 +69,7 @@ class ConsoleWriter : public Print {
     }
 
   private:
-#if TANKRC_ENABLE_NETWORK
-    Print* tap_ = nullptr;
-#else
-    Print* tap_ = nullptr;
-#endif
+    std::array<Print*, 4> taps_{};
 };
 
 static ConsoleWriter console;
@@ -56,10 +80,16 @@ String inputBuffer_;
 bool promptShown_ = false;
 bool wizardActive_ = false;
 bool wizardAbortRequested_ = false;
+ConsoleSource activeSource_ = ConsoleSource::Serial;
+ConsoleSource wizardSource_ = ConsoleSource::Serial;
+bool wizardInputPending_ = false;
+String wizardInputBuffer_;
 static Config::RuntimeConfig baselineConfig_{};
 static bool baselineInitialized_ = false;
 
-void processLine(const String& line);
+void processLine(const String& line, ConsoleSource source);
+void beginWizardSession();
+void finishWizardSession();
 static void snapshotBaseline() {
     if (ctx_.config) {
         baselineConfig_ = *ctx_.config;
@@ -67,22 +97,53 @@ static void snapshotBaseline() {
     }
 }
 
-void processLine(const String& line);
+void beginWizardSession() {
+    wizardActive_ = true;
+    wizardSource_ = activeSource_;
+    wizardInputPending_ = false;
+    wizardInputBuffer_.clear();
+    wizardAbortRequested_ = false;
+    inputBuffer_.clear();
+}
+
+void finishWizardSession() {
+    wizardActive_ = false;
+    wizardInputPending_ = false;
+    wizardAbortRequested_ = false;
+}
+
+void processLine(const String& line, ConsoleSource source);
 
 String readLineBlocking() {
+    const ConsoleSource source = wizardActive_ ? wizardSource_ : ConsoleSource::Serial;
     String line;
     while (true) {
-        while (Serial.available()) {
-            char c = static_cast<char>(Serial.read());
-            if (c == '\r') {
-                continue;
+        if (source == ConsoleSource::Serial) {
+            while (Serial.available()) {
+                char c = static_cast<char>(Serial.read());
+                if (c == '\r') {
+                    continue;
+                }
+                if (c == '\n') {
+                    return line;
+                }
+                line += c;
             }
-            if (c == '\n') {
-                return line;
+        } else {
+            if (wizardInputPending_) {
+                wizardInputPending_ = false;
+                String ready = wizardInputBuffer_;
+                wizardInputBuffer_.clear();
+                return ready;
             }
-            line += c;
+            if (ctx_.bluetooth) {
+                ctx_.bluetooth->loop();
+            }
         }
         delay(10);
+        if (ctx_.bluetooth) {
+            ctx_.bluetooth->loop();
+        }
     }
 }
 
@@ -190,6 +251,7 @@ void showConfig() {
     console.printf("Light bar pin: %d\n", pins.lightBar);
     console.printf("Speaker pin: %d\n", pins.speaker);
     console.printf("Battery sense pin: %d\n", pins.batterySense);
+    console.printf("Slave link TX/RX: %d / %d\n", pins.slaveTx, pins.slaveRx);
 
     console.println(F("--- RC Receiver Pins ---"));
     for (std::size_t i = 0; i < Drivers::RcReceiver::kChannelCount; ++i) {
@@ -269,6 +331,8 @@ static std::vector<PinTokenInfo> collectPinTokens() {
     add("lightbar", "Light bar pin", pins.lightBar, basePins ? &bp.lightBar : nullptr);
     add("speaker", "Speaker pin", pins.speaker, basePins ? &bp.speaker : nullptr);
     add("battery", "Battery sense pin", pins.batterySense, basePins ? &bp.batterySense : nullptr);
+    add("slave_tx", "Slave link TX pin", pins.slaveTx, basePins ? &bp.slaveTx : nullptr);
+    add("slave_rx", "Slave link RX pin", pins.slaveRx, basePins ? &bp.slaveRx : nullptr);
 
     for (std::size_t i = 0; i < std::size(rc.channelPins); ++i) {
         String name = "rc" + String(i + 1);
@@ -384,8 +448,7 @@ void runWifiWizard() {
         return;
     }
 
-    wizardActive_ = true;
-    inputBuffer_.clear();
+    beginWizardSession();
 
     Config::WifiConfig wifi = ctx_.config->wifi;
     auto toString = [](const char* data) { return (data && data[0]) ? String(data) : String(); };
@@ -393,30 +456,26 @@ void runWifiWizard() {
     console.println(F("Wi-Fi configuration (leave blank to keep current value, or type 'q' to exit)."));
     const String staSsid = promptString("Station SSID", toString(wifi.ssid), sizeof(wifi.ssid));
     if (wizardAbortRequested_) {
-        wizardAbortRequested_ = false;
         console.println(F("Wi-Fi wizard cancelled."));
-        wizardActive_ = false;
+        finishWizardSession();
         return;
     }
     const String staPass = promptString("Station Password", wifi.password[0] ? "[hidden]" : "", sizeof(wifi.password));
     if (wizardAbortRequested_) {
-        wizardAbortRequested_ = false;
         console.println(F("Wi-Fi wizard cancelled."));
-        wizardActive_ = false;
+        finishWizardSession();
         return;
     }
     const String apSsid = promptString("Access Point SSID", toString(wifi.apSsid), sizeof(wifi.apSsid));
     if (wizardAbortRequested_) {
-        wizardAbortRequested_ = false;
         console.println(F("Wi-Fi wizard cancelled."));
-        wizardActive_ = false;
+        finishWizardSession();
         return;
     }
     const String apPass = promptString("Access Point Password", wifi.apPassword[0] ? "[hidden]" : "", sizeof(wifi.apPassword));
     if (wizardAbortRequested_) {
-        wizardAbortRequested_ = false;
         console.println(F("Wi-Fi wizard cancelled."));
-        wizardActive_ = false;
+        finishWizardSession();
         return;
     }
 
@@ -444,7 +503,7 @@ void runWifiWizard() {
         console.println(F("Wi-Fi changes discarded."));
     }
 
-    wizardActive_ = false;
+    finishWizardSession();
 }
 
 void handlePinCommand(const String& args) {
@@ -475,7 +534,7 @@ void handlePinCommand(const String& args) {
         console.println(F("  lmb_pwm,lmb_in1,lmb_in2"));
         console.println(F("  rma_pwm,rma_in1,rma_in2"));
         console.println(F("  rmb_pwm,rmb_in1,rmb_in2"));
-        console.println(F("  left_stby,right_stby,lightbar,speaker,battery"));
+        console.println(F("  left_stby,right_stby,lightbar,speaker,battery,slave_tx,slave_rx"));
         console.println(F("  rc1,rc2,rc3,rc4,rc5,rc6"));
         console.println(F("  list  (show all pins)"));
         console.println(F("  diff  (show pins changed since last save)"));
@@ -513,6 +572,8 @@ void handlePinCommand(const String& args) {
         {"lightbar", &pins.lightBar},
         {"speaker", &pins.speaker},
         {"battery", &pins.batterySense},
+        {"slave_tx", &pins.slaveTx},
+        {"slave_rx", &pins.slaveRx},
     };
 
     for (const auto& binding : bindings) {
@@ -557,11 +618,9 @@ void runPinWizard() {
         return;
     }
 
-    wizardActive_ = true;
-    inputBuffer_.clear();
+    beginWizardSession();
 
     Config::RuntimeConfig temp = *ctx_.config;
-    wizardAbortRequested_ = false;
     console.println(F("Pin assignment wizard. Press Enter to keep the current value, or type 'q' to exit early."));
 
     bool aborted = false;
@@ -586,6 +645,10 @@ void runPinWizard() {
         temp.pins.speaker = promptInt("Speaker pin", temp.pins.speaker);
         if (wizardAbortRequested_) { aborted = true; break; }
         temp.pins.batterySense = promptInt("Battery sense pin", temp.pins.batterySense);
+        if (wizardAbortRequested_) { aborted = true; break; }
+        temp.pins.slaveTx = promptInt("Slave link TX pin", temp.pins.slaveTx);
+        if (wizardAbortRequested_) { aborted = true; break; }
+        temp.pins.slaveRx = promptInt("Slave link RX pin", temp.pins.slaveRx);
         if (wizardAbortRequested_) { aborted = true; break; }
         configureRcPins(temp.rc);
         if (wizardAbortRequested_) { aborted = true; break; }
@@ -612,7 +675,7 @@ void runPinWizard() {
         console.println(F("Pin changes discarded."));
     }
 
-    wizardActive_ = false;
+    finishWizardSession();
 }
 
 void runFeatureWizard() {
@@ -621,8 +684,7 @@ void runFeatureWizard() {
         return;
     }
 
-    wizardActive_ = true;
-    inputBuffer_.clear();
+    beginWizardSession();
 
     Config::FeatureConfig features = ctx_.config->features;
     console.println(F("Feature configuration. Press Enter to keep the current setting."));
@@ -642,7 +704,7 @@ void runFeatureWizard() {
         console.println(F("Feature changes discarded."));
     }
 
-    wizardActive_ = false;
+    finishWizardSession();
 }
 
 void performDrivePulse(float throttle, float turn, unsigned long durationMs, const char* label) {
@@ -726,8 +788,7 @@ void runBatteryTest() {
 }
 
 void runTestWizard() {
-    wizardActive_ = true;
-    inputBuffer_.clear();
+    beginWizardSession();
 
     bool done = false;
     while (!done) {
@@ -761,7 +822,7 @@ void runTestWizard() {
         }
     }
 
-    wizardActive_ = false;
+    finishWizardSession();
 }
 
 void handleCommand(String line) {
@@ -857,13 +918,20 @@ void handleCommand(String line) {
     console.println(F("Type 'help' to see available commands."));
 }
 
-void processLine(const String& line) {
+void processLine(const String& line, ConsoleSource source) {
+    if (wizardActive_ && source != wizardSource_) {
+        console.println(F("Wizard already running on another console. Please wait or exit it before entering new commands."));
+        console.printPrompt();
+        return;
+    }
+
     String trimmed = line;
     trimmed.trim();
     if (trimmed.isEmpty()) {
         console.printPrompt();
         return;
     }
+    activeSource_ = source;
     handleCommand(trimmed);
     console.printPrompt();
 }
@@ -893,7 +961,7 @@ void update() {
         if (c == '\n') {
             String line = inputBuffer_;
             inputBuffer_.clear();
-            processLine(line);
+            processLine(line, ConsoleSource::Serial);
         } else {
             inputBuffer_ += c;
         }
@@ -904,13 +972,41 @@ bool isWizardActive() {
     return wizardActive_;
 }
 
+void addConsoleTap(Print* tap) {
+    console.addTap(tap);
+}
+
+void removeConsoleTap(Print* tap) {
+    console.removeTap(tap);
+}
+
 #if TANKRC_ENABLE_NETWORK
 void setRemoteConsoleTap(Print* tap) {
-    console.setTap(tap);
+    static Print* currentTap = nullptr;
+    if (currentTap == tap) {
+        return;
+    }
+    if (currentTap) {
+        console.removeTap(currentTap);
+    }
+    currentTap = tap;
+    if (currentTap) {
+        console.addTap(currentTap);
+    }
 }
 #endif
 
-void injectRemoteLine(const String& line) {
-    processLine(line);
+void injectRemoteLine(const String& line, ConsoleSource source) {
+    if (wizardActive_) {
+        if (source == wizardSource_) {
+            wizardInputBuffer_ = line;
+            wizardInputPending_ = true;
+        } else {
+            console.println(F("Wizard active on another console. Hold tight or exit it before running more commands."));
+            console.printPrompt();
+        }
+        return;
+    }
+    processLine(line, source);
 }
 }  // namespace TankRC::UI

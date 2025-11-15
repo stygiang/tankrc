@@ -1,11 +1,23 @@
-#include "TankRC.h"
-
-#if TANKRC_ENABLE_NETWORK
-#include "network/remote_console.h"
+#ifndef TANKRC_BUILD_MASTER
+#define TANKRC_BUILD_MASTER 1
 #endif
 
 #ifndef TANKRC_ENABLE_NETWORK
 #define TANKRC_ENABLE_NETWORK 0
+#endif
+
+#ifndef TANKRC_ENABLE_BLUETOOTH
+#define TANKRC_ENABLE_BLUETOOTH 1
+#endif
+
+#ifndef TANKRC_USE_DRIVE_PROXY
+#define TANKRC_USE_DRIVE_PROXY 1
+#endif
+
+#include "TankRC.h"
+
+#if TANKRC_ENABLE_NETWORK
+#include "network/remote_console.h"
 #endif
 
 using namespace TankRC;
@@ -16,6 +28,9 @@ static Features::SoundFx sound;
 static Comms::RadioLink radio;
 static Config::RuntimeConfig runtimeConfig = Config::makeDefaultConfig();
 static Storage::ConfigStore configStore;
+#if TANKRC_ENABLE_BLUETOOTH
+static Comms::BluetoothConsole bluetoothConsole;
+#endif
 #if TANKRC_ENABLE_NETWORK
 static Network::WifiManager wifiManager;
 static Network::ControlServer controlServer;
@@ -55,9 +70,22 @@ void setup() {
         .drive = &driveController,
         .lighting = &lighting,
         .sound = &sound,
+#if TANKRC_ENABLE_BLUETOOTH
+        .bluetooth = &bluetoothConsole,
+#endif
     };
     UI::begin(uiContext, applyRuntimeConfig);
     Serial.println(F("[BOOT] Serial UI ready"));
+#if TANKRC_USE_DRIVE_PROXY
+    Serial.println(F("[BOOT] Drive controller proxy enabled (UART link to slave)."));
+#endif
+
+#if TANKRC_ENABLE_BLUETOOTH
+    bluetoothConsole.begin(runtimeConfig);
+    Serial.println(F("[BOOT] Bluetooth console ready (SPP)"));
+#else
+    Serial.println(F("[BOOT] Bluetooth console disabled (TANKRC_ENABLE_BLUETOOTH=0)"));
+#endif
 
 #if TANKRC_ENABLE_NETWORK
     controlServer.begin(&wifiManager, &runtimeConfig, &configStore, applyRuntimeConfig, &sessionLogger);
@@ -76,6 +104,9 @@ void loop() {
     controlServer.loop();
     remoteConsole.loop();
 #endif
+#if TANKRC_ENABLE_BLUETOOTH
+    bluetoothConsole.loop();
+#endif
     UI::update();
 
     if (UI::isWizardActive()) {
@@ -84,6 +115,9 @@ void loop() {
     }
 
     auto packet = radio.poll();
+#if TANKRC_ENABLE_BLUETOOTH
+    packet.btConnected = bluetoothConsole.connected();
+#endif
 #if TANKRC_ENABLE_NETWORK
     packet.wifiConnected = wifiManager.isConnected() && !wifiManager.isApMode();
     const auto overrides = controlServer.getOverrides();
