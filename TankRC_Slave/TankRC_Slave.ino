@@ -34,6 +34,21 @@ Task tasks[] = {
     {taskControlLoop, 5, 0},
 };
 
+void logEvent(const Events::Event& event) {
+    Serial.print(F("[EVT] "));
+    switch (event.type) {
+        case Events::EventType::LowBattery:
+            Serial.printf("Battery low: %.2f V\n", event.f1);
+            break;
+        case Events::EventType::BatteryRecovered:
+            Serial.printf("Battery recovered: %.2f V\n", event.f1);
+            break;
+        default:
+            Serial.println(F("Event received"));
+            break;
+    }
+}
+
 void setup() {
     Serial.begin(115200);
     Serial.println(F("[BOOT] TankRC slave starting..."));
@@ -41,6 +56,7 @@ void setup() {
     Core::setupHardware();
 
     Hal::begin(runtimeConfig);
+    Events::subscribe(logEvent);
     slaveEndpoint.begin(&runtimeConfig, &driveController);
     Serial.println(F("[BOOT] Slave ready. Waiting for master commands."));
 }
@@ -50,7 +66,7 @@ void taskServiceLink() {
 }
 
 void taskControlLoop() {
-    // Placeholder for any additional housekeeping if needed later.
+    Events::process();
 }
 
 void loop() {

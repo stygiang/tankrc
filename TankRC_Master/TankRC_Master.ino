@@ -10,6 +10,8 @@
 #define TANKRC_USE_DRIVE_PROXY 1
 #endif
 
+#include <algorithm>
+
 #include "TankRC.h"
 
 #if TANKRC_ENABLE_NETWORK
@@ -53,6 +55,32 @@ Task tasks[] = {
     {taskHousekeeping, 100, 0},
 };
 
+void handleEventLog(const Events::Event& event) {
+    Serial.print(F("[EVT] "));
+    switch (event.type) {
+        case Events::EventType::RcSignalLost:
+            Serial.println(F("RC signal lost"));
+            break;
+        case Events::EventType::RcSignalRestored:
+            Serial.println(F("RC signal restored"));
+            break;
+        case Events::EventType::DriveModeChanged:
+            Serial.printf("Drive mode -> %ld\n", static_cast<long>(event.i1));
+            break;
+        case Events::EventType::LowBattery:
+            Serial.printf("Battery low: %.2f V\n", event.f1);
+            break;
+        case Events::EventType::BatteryRecovered:
+            Serial.printf("Battery recovered: %.2f V\n", event.f1);
+            break;
+        case Events::EventType::ObstacleAhead:
+            Serial.printf("Obstacle detected (%.2f)\n", event.f1);
+            break;
+        default:
+            break;
+    }
+}
+
 void applyRuntimeConfig();
 
 void setup() {
@@ -72,6 +100,7 @@ void setup() {
     }
 
     Hal::begin(runtimeConfig);
+    Events::subscribe(handleEventLog);
     applyRuntimeConfig();
     Serial.println(F("[BOOT] Runtime config applied"));
 
@@ -100,6 +129,10 @@ void setup() {
 static Comms::CommandPacket currentPacket{};
 static Comms::SlaveProtocol::LightingCommand pendingLighting{};
 static bool outputsEnabled = false;
+static Comms::RcStatusMode lastMode = Comms::RcStatusMode::Active;
+static bool lastRcLinked = true;
+static bool batteryLow = false;
+static float latestBattery = 0.0F;
 
 void taskReadInputs() {
     currentPacket = radio.poll();
@@ -116,6 +149,13 @@ void taskReadInputs() {
     if (overrides.lightsOverride) {
         currentPacket.lightingState = overrides.lightsEnabled;
     }
+
+    if (lastRcLinked && !currentPacket.rcLinked) {
+        Events::publish({Events::EventType::RcSignalLost, Hal::millis32()});
+    } else if (!lastRcLinked && currentPacket.rcLinked) {
+        Events::publish({Events::EventType::RcSignalRestored, Hal::millis32()});
+    }
+    lastRcLinked = currentPacket.rcLinked;
 }
 
 void taskControl() {
@@ -128,6 +168,14 @@ void taskControl() {
         driveCommand.turn *= 0.5F;
     }
     driveController.setCommand(driveCommand);
+    if (currentPacket.status != lastMode) {
+        Events::publish({Events::EventType::DriveModeChanged, Hal::millis32(), static_cast<std::int32_t>(currentPacket.status)});
+        lastMode = currentPacket.status;
+    }
+    const float obstacleLevel = std::min(currentPacket.auxChannel5, currentPacket.auxChannel6);
+    if (obstacleLevel < 0.2F) {
+        Events::publish({Events::EventType::ObstacleAhead, Hal::millis32(), 0, obstacleLevel});
+    }
     pendingLighting = {};
     pendingLighting.ultrasonicLeft = currentPacket.auxChannel5;
     pendingLighting.ultrasonicRight = currentPacket.auxChannel6;
@@ -168,7 +216,18 @@ void taskOutputs() {
     state.ultrasonicRight = currentPacket.auxChannel6;
     state.serverTime = ntpClock.now();
     controlServer.updateState(state);
+#endif
 
+    latestBattery = driveController.readBatteryVoltage();
+    if (!batteryLow && latestBattery < 11.0F) {
+        batteryLow = true;
+        Events::publish({Events::EventType::LowBattery, Hal::millis32(), 0, latestBattery});
+    } else if (batteryLow && latestBattery > 11.5F) {
+        batteryLow = false;
+        Events::publish({Events::EventType::BatteryRecovered, Hal::millis32(), 0, latestBattery});
+    }
+
+#if TANKRC_ENABLE_NETWORK
     if (sessionLogger.enabled()) {
         const unsigned long nowMs = Hal::millis32();
         if (lastLogMs == 0 || nowMs - lastLogMs >= 200) {
@@ -179,7 +238,7 @@ void taskOutputs() {
             entry.throttle = currentPacket.drive.throttle;
             entry.hazard = currentPacket.hazard;
             entry.mode = currentPacket.status;
-            entry.battery = driveController.readBatteryVoltage();
+            entry.battery = latestBattery;
             sessionLogger.log(entry);
         }
     }
@@ -193,6 +252,7 @@ void taskHousekeeping() {
     controlServer.loop();
     remoteConsole.loop();
 #endif
+    Events::process();
     UI::update();
 }
 

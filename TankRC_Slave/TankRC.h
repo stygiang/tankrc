@@ -7,4 +7,5 @@
 #include "control/drive_controller.h"
 #include "drivers/battery_monitor.h"
 #include "drivers/motor_driver.h"
+#include "../events/event_bus.h"
 #include "features/lighting.h"

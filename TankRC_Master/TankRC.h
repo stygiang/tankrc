@@ -5,6 +5,7 @@
 #include "config/settings.h"
 #include "core/system_init.h"
 #include "hal/hal.h"
+#include "../events/event_bus.h"
 #include "comms/slave_link.h"
 #include "comms/radio_link.h"
 #include "control/drive_controller.h"
