@@ -29,7 +29,7 @@ void SlaveEndpoint::begin(Config::RuntimeConfig* config,
     if (config_ && drive_) {
         drive_->begin(*config_);
     }
-    lightingEnabled_ = config_ ? config_->features.lightingEnabled : false;
+    lightingEnabled_ = config_ ? config_->features.lightsEnabled : false;
     resetParser();
 }
 
@@ -138,7 +138,7 @@ void SlaveEndpoint::handleConfig(const SlaveProtocol::ConfigPayload& payload) {
         }
     }
     Hal::applyConfig(*config_);
-    lightingEnabled_ = config_->features.lightingEnabled;
+    lightingEnabled_ = config_->features.lightsEnabled;
     if (drive_) {
         drive_->begin(*config_);
     }

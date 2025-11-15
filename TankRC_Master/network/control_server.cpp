@@ -462,6 +462,18 @@ form input, form select {
             <label><input type="checkbox" id="soundEnabled" /></label>
         </div>
         <div class="switch-row">
+            <span>Wi-Fi Enabled</span>
+            <label><input type="checkbox" id="wifiEnabled" /></label>
+        </div>
+        <div class="switch-row">
+            <span>Ultrasonic Enabled</span>
+            <label><input type="checkbox" id="ultrasonicEnabled" /></label>
+        </div>
+        <div class="switch-row">
+            <span>Tip-over Enabled</span>
+            <label><input type="checkbox" id="tipEnabled" /></label>
+        </div>
+        <div class="switch-row">
             <span>Wi-Fi Alert Blink</span>
             <label><input type="checkbox" id="blinkWifi" /></label>
         </div>
@@ -532,6 +544,9 @@ async function loadConfig(){
         document.getElementById('pwmFrequency').value=cfg.lighting.pwmFrequency;
         document.getElementById('lightingEnabled').checked=cfg.features.lighting;
         document.getElementById('soundEnabled').checked=cfg.features.sound;
+        document.getElementById('wifiEnabled').checked=cfg.features.wifi;
+        document.getElementById('ultrasonicEnabled').checked=cfg.features.ultrasonic;
+        document.getElementById('tipEnabled').checked=cfg.features.tip;
         document.getElementById('blinkWifi').checked=cfg.blink.wifi;
         document.getElementById('blinkRc').checked=cfg.blink.rc;
         document.getElementById('blinkPeriod').value=cfg.blink.period;
@@ -548,6 +563,9 @@ async function submitConfig(evt){
     params.append('pwmFrequency',document.getElementById('pwmFrequency').value);
     params.append('lightingEnabled',document.getElementById('lightingEnabled').checked?'1':'0');
     params.append('soundEnabled',document.getElementById('soundEnabled').checked?'1':'0');
+    params.append('wifiEnabled',document.getElementById('wifiEnabled').checked?'1':'0');
+    params.append('ultrasonicEnabled',document.getElementById('ultrasonicEnabled').checked?'1':'0');
+    params.append('tipEnabled',document.getElementById('tipEnabled').checked?'1':'0');
     params.append('blinkWifi',document.getElementById('blinkWifi').checked?'1':'0');
     params.append('blinkRc',document.getElementById('blinkRc').checked?'1':'0');
     params.append('blinkPeriod',document.getElementById('blinkPeriod').value);
@@ -778,7 +796,7 @@ void ControlServer::handleConfigImport() {
                 bool value = false;
                 if (featureKey == "lighting") {
                     if (!parser.parseBool(value)) return false;
-                    config_->features.lightingEnabled = value;
+                    config_->features.lightsEnabled = value;
                     changed = true;
                     return true;
                 }
@@ -791,6 +809,24 @@ void ControlServer::handleConfigImport() {
                 if (featureKey == "sensors") {
                     if (!parser.parseBool(value)) return false;
                     config_->features.sensorsEnabled = value;
+                    changed = true;
+                    return true;
+                }
+                if (featureKey == "wifi") {
+                    if (!parser.parseBool(value)) return false;
+                    config_->features.wifiEnabled = value;
+                    changed = true;
+                    return true;
+                }
+                if (featureKey == "ultrasonic") {
+                    if (!parser.parseBool(value)) return false;
+                    config_->features.ultrasonicEnabled = value;
+                    changed = true;
+                    return true;
+                }
+                if (featureKey == "tip") {
+                    if (!parser.parseBool(value)) return false;
+                    config_->features.tipOverEnabled = value;
                     changed = true;
                     return true;
                 }
@@ -1050,8 +1086,8 @@ void ControlServer::handleConfigPost() {
     bool changed = false;
     if (server_.hasArg("lightingEnabled")) {
         const bool val = server_.arg("lightingEnabled") == "1";
-        if (config_->features.lightingEnabled != val) {
-            config_->features.lightingEnabled = val;
+        if (config_->features.lightsEnabled != val) {
+            config_->features.lightsEnabled = val;
             changed = true;
         }
     }
@@ -1059,6 +1095,27 @@ void ControlServer::handleConfigPost() {
         const bool val = server_.arg("soundEnabled") == "1";
         if (config_->features.soundEnabled != val) {
             config_->features.soundEnabled = val;
+            changed = true;
+        }
+    }
+    if (server_.hasArg("wifiEnabled")) {
+        const bool val = server_.arg("wifiEnabled") == "1";
+        if (config_->features.wifiEnabled != val) {
+            config_->features.wifiEnabled = val;
+            changed = true;
+        }
+    }
+    if (server_.hasArg("ultrasonicEnabled")) {
+        const bool val = server_.arg("ultrasonicEnabled") == "1";
+        if (config_->features.ultrasonicEnabled != val) {
+            config_->features.ultrasonicEnabled = val;
+            changed = true;
+        }
+    }
+    if (server_.hasArg("tipEnabled")) {
+        const bool val = server_.arg("tipEnabled") == "1";
+        if (config_->features.tipOverEnabled != val) {
+            config_->features.tipOverEnabled = val;
             changed = true;
         }
     }
@@ -1207,9 +1264,12 @@ String ControlServer::buildConfigJson(bool includeSensitive) const {
     json += "},";
 
     json += "\"features\":{";
-    json += "\"lighting\":" + String(config_->features.lightingEnabled ? 1 : 0) + ",";
+    json += "\"lighting\":" + String(config_->features.lightsEnabled ? 1 : 0) + ",";
     json += "\"sound\":" + String(config_->features.soundEnabled ? 1 : 0) + ",";
-    json += "\"sensors\":" + String(config_->features.sensorsEnabled ? 1 : 0);
+    json += "\"sensors\":" + String(config_->features.sensorsEnabled ? 1 : 0) + ",";
+    json += "\"wifi\":" + String(config_->features.wifiEnabled ? 1 : 0) + ",";
+    json += "\"ultrasonic\":" + String(config_->features.ultrasonicEnabled ? 1 : 0) + ",";
+    json += "\"tip\":" + String(config_->features.tipOverEnabled ? 1 : 0);
     json += "},";
 
     json += "\"lighting\":{";

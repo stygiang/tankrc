@@ -2,8 +2,10 @@
 #define TANKRC_BUILD_MASTER 1
 #endif
 
+#include "config/features.h"
+
 #ifndef TANKRC_ENABLE_NETWORK
-#define TANKRC_ENABLE_NETWORK 0
+#define TANKRC_ENABLE_NETWORK FEATURE_WIFI
 #endif
 
 #ifndef TANKRC_USE_DRIVE_PROXY
@@ -21,7 +23,9 @@
 using namespace TankRC;
 
 static Control::DriveController driveController;
+#if FEATURE_SOUND
 static Features::SoundFx sound;
+#endif
 static Comms::RadioLink radio;
 static Config::RuntimeConfig runtimeConfig = Config::makeDefaultConfig();
 static Storage::ConfigStore configStore;
@@ -30,6 +34,7 @@ static Network::WifiManager wifiManager;
 static Network::ControlServer controlServer;
 static Network::RemoteConsole remoteConsole;
 static bool wifiInitialized = false;
+static bool networkActive = false;
 static Time::NtpClock ntpClock;
 static Logging::SessionLogger sessionLogger;
 static unsigned long lastLogMs = 0UL;
@@ -108,7 +113,11 @@ void setup() {
         .config = &runtimeConfig,
         .store = &configStore,
         .drive = &driveController,
+#if FEATURE_SOUND
         .sound = &sound,
+#else
+        .sound = nullptr,
+#endif
     };
     UI::begin(uiContext, applyRuntimeConfig);
     Serial.println(F("[BOOT] Serial UI ready"));
@@ -117,10 +126,16 @@ void setup() {
 #endif
 
 #if TANKRC_ENABLE_NETWORK
-    controlServer.begin(&wifiManager, &runtimeConfig, &configStore, applyRuntimeConfig, &sessionLogger);
-    Serial.println(F("[BOOT] Control server online"));
-    remoteConsole.begin();
-    Serial.println(F("[BOOT] Remote console online (telnet 2323)"));
+    if (runtimeConfig.features.wifiEnabled) {
+        controlServer.begin(&wifiManager, &runtimeConfig, &configStore, applyRuntimeConfig, &sessionLogger);
+        Serial.println(F("[BOOT] Control server online"));
+        remoteConsole.begin();
+        Serial.println(F("[BOOT] Remote console online (telnet 2323)"));
+        networkActive = true;
+    } else {
+        networkActive = false;
+        Serial.println(F("[BOOT] Network features disabled via runtime config."));
+    }
 #else
     Serial.println(F("[BOOT] Network stack disabled (TANKRC_ENABLE_NETWORK=0)"));
 #endif
@@ -136,12 +151,16 @@ static float latestBattery = 0.0F;
 
 void taskReadInputs() {
     currentPacket = radio.poll();
+    Network::Overrides overrides{};
 #if TANKRC_ENABLE_NETWORK
-    currentPacket.wifiConnected = wifiManager.isConnected() && !wifiManager.isApMode();
-    const auto overrides = controlServer.getOverrides();
+    if (networkActive) {
+        currentPacket.wifiConnected = wifiManager.isConnected() && !wifiManager.isApMode();
+        overrides = controlServer.getOverrides();
+    } else {
+        currentPacket.wifiConnected = false;
+    }
 #else
     currentPacket.wifiConnected = false;
-    Network::Overrides overrides{};
 #endif
     if (overrides.hazardOverride) {
         currentPacket.hazard = overrides.hazardEnabled;
@@ -173,12 +192,12 @@ void taskControl() {
         lastMode = currentPacket.status;
     }
     const float obstacleLevel = std::min(currentPacket.auxChannel5, currentPacket.auxChannel6);
-    if (obstacleLevel < 0.2F) {
+    if (runtimeConfig.features.ultrasonicEnabled && obstacleLevel < 0.2F) {
         Events::publish({Events::EventType::ObstacleAhead, Hal::millis32(), 0, obstacleLevel});
     }
     pendingLighting = {};
-    pendingLighting.ultrasonicLeft = currentPacket.auxChannel5;
-    pendingLighting.ultrasonicRight = currentPacket.auxChannel6;
+    pendingLighting.ultrasonicLeft = runtimeConfig.features.ultrasonicEnabled ? currentPacket.auxChannel5 : 1.0F;
+    pendingLighting.ultrasonicRight = runtimeConfig.features.ultrasonicEnabled ? currentPacket.auxChannel6 : 1.0F;
     pendingLighting.status = static_cast<std::uint8_t>(currentPacket.status);
     if (currentPacket.hazard) {
         pendingLighting.flags |= Comms::SlaveProtocol::LightingHazard;
@@ -190,7 +209,7 @@ void taskControl() {
         pendingLighting.flags |= Comms::SlaveProtocol::LightingWifiLinked;
     }
     outputsEnabled = currentPacket.status != Comms::RcStatusMode::Locked;
-    const bool lightingInstalled = runtimeConfig.features.lightingEnabled;
+    const bool lightingInstalled = runtimeConfig.features.lightsEnabled;
     const bool hazardActive = lightingInstalled && currentPacket.hazard;
     const bool lightEnable = lightingInstalled && outputsEnabled && currentPacket.lightingState;
     const bool lightingEffective = lightEnable || hazardActive;
@@ -199,23 +218,27 @@ void taskControl() {
     }
     driveController.setLightingCommand(pendingLighting);
     driveController.update();
+#if FEATURE_SOUND
     sound.update(outputsEnabled && currentPacket.soundState);
+#endif
 }
 
 void taskOutputs() {
 #if TANKRC_ENABLE_NETWORK
-    Network::ControlState state{};
-    state.steering = currentPacket.drive.turn;
-    state.throttle = currentPacket.drive.throttle;
-    state.hazard = currentPacket.hazard;
-    state.lighting = (pendingLighting.flags & Comms::SlaveProtocol::LightingEnabled) != 0;
-    state.mode = currentPacket.status;
-    state.rcLinked = currentPacket.rcLinked;
-    state.wifiLinked = currentPacket.wifiConnected;
-    state.ultrasonicLeft = currentPacket.auxChannel5;
-    state.ultrasonicRight = currentPacket.auxChannel6;
-    state.serverTime = ntpClock.now();
-    controlServer.updateState(state);
+    if (networkActive) {
+        Network::ControlState state{};
+        state.steering = currentPacket.drive.turn;
+        state.throttle = currentPacket.drive.throttle;
+        state.hazard = currentPacket.hazard;
+        state.lighting = (pendingLighting.flags & Comms::SlaveProtocol::LightingEnabled) != 0;
+        state.mode = currentPacket.status;
+        state.rcLinked = currentPacket.rcLinked;
+        state.wifiLinked = currentPacket.wifiConnected;
+        state.ultrasonicLeft = currentPacket.auxChannel5;
+        state.ultrasonicRight = currentPacket.auxChannel6;
+        state.serverTime = ntpClock.now();
+        controlServer.updateState(state);
+    }
 #endif
 
     latestBattery = driveController.readBatteryVoltage();
@@ -228,7 +251,7 @@ void taskOutputs() {
     }
 
 #if TANKRC_ENABLE_NETWORK
-    if (sessionLogger.enabled()) {
+    if (networkActive && sessionLogger.enabled()) {
         const unsigned long nowMs = Hal::millis32();
         if (lastLogMs == 0 || nowMs - lastLogMs >= 200) {
             lastLogMs = nowMs;
@@ -247,10 +270,12 @@ void taskOutputs() {
 
 void taskHousekeeping() {
 #if TANKRC_ENABLE_NETWORK
-    wifiManager.loop();
-    ntpClock.update(wifiManager.isConnected());
-    controlServer.loop();
-    remoteConsole.loop();
+    if (networkActive) {
+        wifiManager.loop();
+        ntpClock.update(wifiManager.isConnected());
+        controlServer.loop();
+        remoteConsole.loop();
+    }
 #endif
     Events::process();
     UI::update();
@@ -275,19 +300,25 @@ void loop() {
 
 void applyRuntimeConfig() {
 #if TANKRC_ENABLE_NETWORK
-    if (!wifiInitialized) {
-        wifiManager.begin(runtimeConfig);
-        wifiInitialized = true;
-    } else {
-        wifiManager.applyConfig(runtimeConfig);
+    const bool enableWifi = runtimeConfig.features.wifiEnabled && FEATURE_WIFI;
+    if (enableWifi) {
+        if (!wifiInitialized) {
+            wifiManager.begin(runtimeConfig);
+            wifiInitialized = true;
+        } else {
+            wifiManager.applyConfig(runtimeConfig);
+        }
     }
+    networkActive = enableWifi;
 #endif
     Hal::applyConfig(runtimeConfig);
     driveController.begin(runtimeConfig);
 
+#if FEATURE_SOUND
     sound.begin(runtimeConfig.pins.speaker);
     sound.setFeatureEnabled(runtimeConfig.features.soundEnabled);
     sound.update(false);
+#endif
     radio.begin(runtimeConfig);
 #if TANKRC_ENABLE_NETWORK
     controlServer.notifyConfigApplied();

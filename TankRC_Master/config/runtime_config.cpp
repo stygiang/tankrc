@@ -24,9 +24,12 @@ RuntimeConfig makeDefaultConfig() {
     config.pins.slaveTx = Pins::SLAVE_UART_TX;
     config.pins.slaveRx = Pins::SLAVE_UART_RX;
 
-    config.features.lightingEnabled = true;
-    config.features.soundEnabled = true;
-    config.features.sensorsEnabled = true;
+    config.features.lightsEnabled = FEATURE_LIGHTS != 0;
+    config.features.soundEnabled = FEATURE_SOUND != 0;
+    config.features.sensorsEnabled = FEATURE_ULTRASONIC != 0;
+    config.features.wifiEnabled = FEATURE_WIFI != 0;
+    config.features.ultrasonicEnabled = FEATURE_ULTRASONIC != 0;
+    config.features.tipOverEnabled = FEATURE_TIPOVER != 0;
 
     config.lighting.pcaAddress = 0x40;
     config.lighting.pwmFrequency = 800;
@@ -37,7 +40,6 @@ RuntimeConfig makeDefaultConfig() {
     config.lighting.blink.periodMs = 450;
     config.lighting.blink.wifi = true;
     config.lighting.blink.rc = true;
-    config.lighting.blink.bt = true;
 
     std::strncpy(config.wifi.ssid, "", sizeof(config.wifi.ssid));
     std::strncpy(config.wifi.password, "", sizeof(config.wifi.password));
@@ -202,6 +204,13 @@ bool migrateConfig(RuntimeConfig& config, std::uint32_t fromVersion) {
     if (stringChanged) {
         changed = true;
     }
+
+    config.features.lightsEnabled = config.features.lightsEnabled && defaults.features.lightsEnabled;
+    config.features.soundEnabled = config.features.soundEnabled && defaults.features.soundEnabled;
+    config.features.sensorsEnabled = config.features.sensorsEnabled && defaults.features.sensorsEnabled;
+    config.features.wifiEnabled = defaults.features.wifiEnabled;
+    config.features.ultrasonicEnabled = defaults.features.ultrasonicEnabled;
+    config.features.tipOverEnabled = defaults.features.tipOverEnabled;
 
     config.version = kConfigVersion;
     return changed;

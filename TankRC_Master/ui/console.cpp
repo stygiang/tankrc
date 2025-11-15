@@ -265,9 +265,12 @@ void showConfig() {
                   ctx_.config->lighting.blink.periodMs);
 
     console.println(F("--- Feature Flags ---"));
-    console.printf("Lighting enabled: %s\n", features.lightingEnabled ? "yes" : "no");
+    console.printf("Lights enabled: %s\n", features.lightsEnabled ? "yes" : "no");
     console.printf("Sound enabled: %s\n", features.soundEnabled ? "yes" : "no");
     console.printf("Sensors enabled: %s\n", features.sensorsEnabled ? "yes" : "no");
+    console.printf("Wi-Fi enabled: %s\n", features.wifiEnabled ? "yes" : "no");
+    console.printf("Ultrasonic enabled: %s\n", features.ultrasonicEnabled ? "yes" : "no");
+    console.printf("Tip-over enabled: %s\n", features.tipOverEnabled ? "yes" : "no");
     console.println();
 }
 
@@ -678,9 +681,12 @@ void runFeatureWizard() {
     Config::FeatureConfig features = ctx_.config->features;
     console.println(F("Feature configuration. Press Enter to keep the current setting."));
 
-    features.lightingEnabled = promptBool("Lighting enabled", features.lightingEnabled);
+    features.lightsEnabled = promptBool("Lights enabled", features.lightsEnabled);
     features.soundEnabled = promptBool("Sound enabled", features.soundEnabled);
     features.sensorsEnabled = promptBool("Sensors enabled", features.sensorsEnabled);
+    features.wifiEnabled = promptBool("Wi-Fi enabled", features.wifiEnabled);
+    features.ultrasonicEnabled = promptBool("Ultrasonic sensors enabled", features.ultrasonicEnabled);
+    features.tipOverEnabled = promptBool("Tip-over protection enabled", features.tipOverEnabled);
 
     const bool apply = promptBool("Apply these changes?", true);
     if (apply) {

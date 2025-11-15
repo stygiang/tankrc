@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+#include "config/features.h"
+
 namespace TankRC::Config {
 constexpr std::uint32_t kConfigVersion = 6;
 
@@ -30,9 +32,12 @@ struct PinAssignments {
 };
 
 struct FeatureConfig {
-    bool lightingEnabled = true;
+    bool lightsEnabled = true;
     bool soundEnabled = true;
     bool sensorsEnabled = true;
+    bool wifiEnabled = true;
+    bool ultrasonicEnabled = true;
+    bool tipOverEnabled = false;
 };
 
 struct RgbChannel {
