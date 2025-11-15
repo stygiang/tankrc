@@ -34,6 +34,7 @@ Task tasks[] = {
     {taskControlLoop, 5, 0},
 };
 
+#if FEATURE_EVENT_LOG
 void logEvent(const Events::Event& event) {
     Serial.print(F("[EVT] "));
     switch (event.type) {
@@ -48,6 +49,7 @@ void logEvent(const Events::Event& event) {
             break;
     }
 }
+#endif  // FEATURE_EVENT_LOG
 
 void setup() {
     Serial.begin(115200);
@@ -56,8 +58,13 @@ void setup() {
     Core::setupHardware();
 
     Hal::begin(runtimeConfig);
+<<<<<<< HEAD
     Health::setStatus(Health::HealthCode::Ok, "Slave startup");
+=======
+#if FEATURE_EVENT_LOG
+>>>>>>> 2bb7000 (event logger toggle)
     Events::subscribe(logEvent);
+#endif
     slaveEndpoint.begin(&runtimeConfig, &driveController);
     Serial.println(F("[BOOT] Slave ready. Waiting for master commands."));
 }

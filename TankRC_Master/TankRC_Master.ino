@@ -71,6 +71,7 @@ Task tasks[] = {
     {taskHousekeeping, 100, 0},
 };
 
+<<<<<<< HEAD
 void updateHealthState() {
     using namespace Health;
     if (!batteryHealthy) {
@@ -84,6 +85,9 @@ void updateHealthState() {
     }
 }
 
+=======
+#if FEATURE_EVENT_LOG
+>>>>>>> 2bb7000 (event logger toggle)
 void handleEventLog(const Events::Event& event) {
     Serial.print(F("[EVT] "));
     switch (event.type) {
@@ -109,6 +113,7 @@ void handleEventLog(const Events::Event& event) {
             break;
     }
 }
+#endif  // FEATURE_EVENT_LOG
 
 void applyRuntimeConfig();
 
@@ -129,9 +134,14 @@ void setup() {
     }
 
     Hal::begin(runtimeConfig);
+<<<<<<< HEAD
     rcHealthy = batteryHealthy = wifiHealthy = true;
     Health::setStatus(Health::HealthCode::Ok, "Startup");
+=======
+#if FEATURE_EVENT_LOG
+>>>>>>> 2bb7000 (event logger toggle)
     Events::subscribe(handleEventLog);
+#endif
     applyRuntimeConfig();
     Serial.println(F("[BOOT] Runtime config applied"));
 

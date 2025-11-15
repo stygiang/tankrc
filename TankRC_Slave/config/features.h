@@ -23,3 +23,7 @@
 #ifndef FEATURE_OTA
 #define FEATURE_OTA 0
 #endif
+
+#ifndef FEATURE_EVENT_LOG
+#define FEATURE_EVENT_LOG 1
+#endif
