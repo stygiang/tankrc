@@ -7,18 +7,36 @@
 #include "config/features.h"
 
 namespace TankRC::Config {
-constexpr std::uint32_t kConfigVersion = 9;
+constexpr std::uint32_t kConfigVersion = 10;
+
+enum class PinOwner : std::uint8_t { Slave = 0, IoExpander = 1 };
+
+struct OwnedPin {
+    int gpio = -1;
+    std::uint8_t expanderPin = 0;
+    PinOwner owner = PinOwner::Slave;
+    std::uint8_t reserved = 0;
+};
 
 struct ChannelPins {
     int pwm = -1;
-    int in1 = -1;
-    int in2 = -1;
+    OwnedPin in1{};
+    OwnedPin in2{};
 };
 
 struct DriverPins {
     ChannelPins motorA{};
     ChannelPins motorB{};
-    int standby = -1;
+    OwnedPin standby{};
+};
+
+struct IoExpanderConfig {
+    bool enabled = false;
+    bool useMux = false;
+    std::uint8_t address = 0x20;
+    std::uint8_t muxAddress = 0x70;
+    std::uint8_t muxChannel = 0;
+    std::uint8_t reserved = 0;
 };
 
 struct PinAssignments {
@@ -29,6 +47,7 @@ struct PinAssignments {
     int batterySense = -1;
     int slaveTx = -1;
     int slaveRx = -1;
+    IoExpanderConfig ioExpander{};
 };
 
 struct FeatureConfig {

@@ -7,22 +7,45 @@
 #include "config/pins.h"
 
 namespace TankRC::Config {
+namespace {
+OwnedPin makeGpioPin(int gpio) {
+    OwnedPin pin{};
+    pin.gpio = gpio;
+    pin.owner = PinOwner::Slave;
+    pin.expanderPin = 0;
+    return pin;
+}
+}  // namespace
+
 RuntimeConfig makeDefaultConfig() {
     RuntimeConfig config{};
 
-    config.pins.leftDriver.motorA = {Pins::LEFT_MOTOR1_PWM, Pins::LEFT_MOTOR1_IN1, Pins::LEFT_MOTOR1_IN2};
-    config.pins.leftDriver.motorB = {Pins::LEFT_MOTOR2_PWM, Pins::LEFT_MOTOR2_IN1, Pins::LEFT_MOTOR2_IN2};
-    config.pins.leftDriver.standby = Pins::LEFT_DRIVER_STBY;
+    config.pins.leftDriver.motorA.pwm = Pins::LEFT_MOTOR1_PWM;
+    config.pins.leftDriver.motorA.in1 = makeGpioPin(Pins::LEFT_MOTOR1_IN1);
+    config.pins.leftDriver.motorA.in2 = makeGpioPin(Pins::LEFT_MOTOR1_IN2);
+    config.pins.leftDriver.motorB.pwm = Pins::LEFT_MOTOR2_PWM;
+    config.pins.leftDriver.motorB.in1 = makeGpioPin(Pins::LEFT_MOTOR2_IN1);
+    config.pins.leftDriver.motorB.in2 = makeGpioPin(Pins::LEFT_MOTOR2_IN2);
+    config.pins.leftDriver.standby = makeGpioPin(Pins::LEFT_DRIVER_STBY);
 
-    config.pins.rightDriver.motorA = {Pins::RIGHT_MOTOR1_PWM, Pins::RIGHT_MOTOR1_IN1, Pins::RIGHT_MOTOR1_IN2};
-    config.pins.rightDriver.motorB = {Pins::RIGHT_MOTOR2_PWM, Pins::RIGHT_MOTOR2_IN1, Pins::RIGHT_MOTOR2_IN2};
-    config.pins.rightDriver.standby = Pins::RIGHT_DRIVER_STBY;
+    config.pins.rightDriver.motorA.pwm = Pins::RIGHT_MOTOR1_PWM;
+    config.pins.rightDriver.motorA.in1 = makeGpioPin(Pins::RIGHT_MOTOR1_IN1);
+    config.pins.rightDriver.motorA.in2 = makeGpioPin(Pins::RIGHT_MOTOR1_IN2);
+    config.pins.rightDriver.motorB.pwm = Pins::RIGHT_MOTOR2_PWM;
+    config.pins.rightDriver.motorB.in1 = makeGpioPin(Pins::RIGHT_MOTOR2_IN1);
+    config.pins.rightDriver.motorB.in2 = makeGpioPin(Pins::RIGHT_MOTOR2_IN2);
+    config.pins.rightDriver.standby = makeGpioPin(Pins::RIGHT_DRIVER_STBY);
 
     config.pins.lightBar = Pins::LIGHT_BAR;
     config.pins.speaker = Pins::SPEAKER;
     config.pins.batterySense = Pins::BATTERY_SENSE;
     config.pins.slaveTx = Pins::SLAVE_UART_TX;
     config.pins.slaveRx = Pins::SLAVE_UART_RX;
+    config.pins.ioExpander.enabled = false;
+    config.pins.ioExpander.useMux = true;
+    config.pins.ioExpander.address = 0x20;
+    config.pins.ioExpander.muxAddress = 0x70;
+    config.pins.ioExpander.muxChannel = 0;
 
     config.features.lightsEnabled = FEATURE_LIGHTS != 0;
     config.features.soundEnabled = FEATURE_SOUND != 0;
@@ -73,6 +96,8 @@ constexpr int kMinGpio = -1;
 constexpr int kMaxGpio = 39;
 constexpr int kMinPcaChannel = -1;
 constexpr int kMaxPcaChannel = 15;
+constexpr int kMinExpanderPin = 0;
+constexpr int kMaxExpanderPin = 15;
 
 int clampGpio(int pin) {
     if (pin < kMinGpio || pin > kMaxGpio) {
@@ -99,11 +124,37 @@ bool normalizeGpio(int& pin, int defaultValue) {
     return changed;
 }
 
+bool normalizeOwnedPin(OwnedPin& pin, const OwnedPin& defaults) {
+    bool changed = false;
+    if (pin.owner == PinOwner::IoExpander) {
+        std::uint8_t clamped = pin.expanderPin;
+        if (clamped < kMinExpanderPin || clamped > kMaxExpanderPin) {
+            clamped = defaults.owner == PinOwner::IoExpander ? defaults.expanderPin : 0;
+        }
+        if (clamped != pin.expanderPin) {
+            pin.expanderPin = clamped;
+            changed = true;
+        }
+        pin.gpio = -1;
+    } else {
+        changed |= normalizeGpio(pin.gpio, defaults.gpio);
+        if (pin.owner != PinOwner::Slave) {
+            pin.owner = PinOwner::Slave;
+            changed = true;
+        }
+        if (pin.expanderPin != 0) {
+            pin.expanderPin = 0;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 bool normalizeChannelPins(ChannelPins& pins, const ChannelPins& defaults) {
     bool changed = false;
     changed |= normalizeGpio(pins.pwm, defaults.pwm);
-    changed |= normalizeGpio(pins.in1, defaults.in1);
-    changed |= normalizeGpio(pins.in2, defaults.in2);
+    changed |= normalizeOwnedPin(pins.in1, defaults.in1);
+    changed |= normalizeOwnedPin(pins.in2, defaults.in2);
     return changed;
 }
 
@@ -111,7 +162,34 @@ bool normalizeDriverPins(DriverPins& pins, const DriverPins& defaults) {
     bool changed = false;
     changed |= normalizeChannelPins(pins.motorA, defaults.motorA);
     changed |= normalizeChannelPins(pins.motorB, defaults.motorB);
-    changed |= normalizeGpio(pins.standby, defaults.standby);
+    changed |= normalizeOwnedPin(pins.standby, defaults.standby);
+    return changed;
+}
+
+bool normalizeIoExpander(IoExpanderConfig& cfg, const IoExpanderConfig& defaults) {
+    bool changed = false;
+    auto clampAddress = [](int value) {
+        if (value < 0 || value > 0x7F) {
+            return 0;
+        }
+        return value;
+    };
+    std::uint8_t address = cfg.address;
+    std::uint8_t muxAddress = cfg.muxAddress;
+    const std::uint8_t clampedAddr = static_cast<std::uint8_t>(clampAddress(address));
+    if (clampedAddr != cfg.address) {
+        cfg.address = clampedAddr ? clampedAddr : defaults.address;
+        changed = true;
+    }
+    const std::uint8_t clampedMuxAddr = static_cast<std::uint8_t>(clampAddress(muxAddress));
+    if (clampedMuxAddr != cfg.muxAddress) {
+        cfg.muxAddress = clampedMuxAddr ? clampedMuxAddr : defaults.muxAddress;
+        changed = true;
+    }
+    if (cfg.muxChannel > 7) {
+        cfg.muxChannel = defaults.muxChannel;
+        changed = true;
+    }
     return changed;
 }
 
@@ -185,6 +263,7 @@ bool migrateConfig(RuntimeConfig& config, std::uint32_t fromVersion) {
     changed |= normalizeGpio(config.pins.batterySense, defaults.pins.batterySense);
     changed |= normalizeGpio(config.pins.slaveTx, defaults.pins.slaveTx);
     changed |= normalizeGpio(config.pins.slaveRx, defaults.pins.slaveRx);
+    changed |= normalizeIoExpander(config.pins.ioExpander, defaults.pins.ioExpander);
 
     for (std::size_t i = 0; i < std::size(config.rc.channelPins); ++i) {
         changed |= normalizeGpio(config.rc.channelPins[i], defaults.rc.channelPins[i]);
