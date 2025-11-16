@@ -909,6 +909,13 @@ bool isLightingTokenName(const String& token) {
     return false;
 }
 
+void renderDriverChannelRow(const char* name,
+                            const Config::ChannelPins& channel,
+                            const char* pwmToken,
+                            const char* in1Token,
+                            const char* in2Token);
+void renderPinField(const char* label, const char* token, int value, bool allowPcf);
+
 void renderIoPortExpanderSummary(const Config::RuntimeConfig& config) {
     console.println();
     console.println(F(" IO Port Expander (PCA9685 lighting board)"));
@@ -1014,6 +1021,31 @@ void renderPcfExpanderSummary(const Config::RuntimeConfig& config, const std::ve
     }
 }
 
+bool isDriverTokenName(const String& token) {
+    static const char* const tokens[] = {
+        "lma_pwm", "lma_in1", "lma_in2", "lmb_pwm", "lmb_in1", "lmb_in2", "left_stby",
+        "rma_pwm", "rma_in1", "rma_in2", "rmb_pwm", "rmb_in1", "rmb_in2", "right_stby",
+    };
+    for (const char* name : tokens) {
+        if (token == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void renderDriverExpanderSummary(const Config::RuntimeConfig& config) {
+    console.println();
+    console.println(F(" Drive modules (left/right)"));
+    renderDriverChannelRow("Left Motor A", config.pins.leftDriver.motorA, "lma_pwm", "lma_in1", "lma_in2");
+    renderDriverChannelRow("Left Motor B", config.pins.leftDriver.motorB, "lmb_pwm", "lmb_in1", "lmb_in2");
+    renderPinField("Left STBY", "left_stby", config.pins.leftDriver.standby, true);
+    console.println();
+    renderDriverChannelRow("Right Motor A", config.pins.rightDriver.motorA, "rma_pwm", "rma_in1", "rma_in2");
+    renderDriverChannelRow("Right Motor B", config.pins.rightDriver.motorB, "rmb_pwm", "rmb_in1", "rmb_in2");
+    renderPinField("Right STBY", "right_stby", config.pins.rightDriver.standby, true);
+}
+
 void renderDriverChannelRow(const char* name,
                             const Config::ChannelPins& channel,
                             const char* pwmToken,
@@ -1080,12 +1112,12 @@ void renderPinWizardDashboard(const Config::RuntimeConfig& config, const std::ve
     console.printf("Pending changes: %u (type 'diff' to list details)\n", static_cast<unsigned>(pending));
     console.println(F("Quick edit: <token>=<value> or <token> <value>  (e.g. lma_pwm=32, rc1 15)"));
     console.println(F("Number keys open grouped editors:"));
-    console.println(F(" 1) Left driver      2) Right driver       3) Lights/Speaker/Battery"));
+    console.println(F(" 1) Drive modules (left/right)   3) Lights/Speaker/Battery"));
     console.println(F(" 4) Slave link       5) RC receiver pins   6) PWM IO port expander"));
-    console.println(F(" 7) PCA9685 address  8) PCF8575 IO expander  9) Finish wizard"));
+    console.println(F(" 8) PCF8575 IO expander  9) Finish wizard"));
     console.println(F(" Type 0/exit to cancel without applying. '?' for help."));
     console.println(F(" Tip: fl_*/fr_*/rl_*/rr_* tokens edit color channels without opening option 6 (PWM IO port expander)."));
-    console.println(F(" Hint: Option 8 shows PCF8575 usage. Assign pins via '<token>=pcf#' or type 'pcf3' to inspect a channel."));
+    console.println(F(" Hint: Option 6 accepts 'addr' to change PCA9685 address; option 8 shows PCF8575 usage."));
 }
 
 void configureLighting(Config::LightingConfig& lighting);
@@ -1097,7 +1129,7 @@ void printIoPortTokenHelp() {
     console.println(F("  rl_r, rl_g, rl_b  (rear left RGB)"));
     console.println(F("  rr_r, rr_g, rr_b  (rear right RGB)"));
     console.println(F("Use '<token>=<value>' for one-shot edits or type a token for guided input."));
-    console.println(F("Type 'advanced' to run the legacy lighting wizard (blink settings)."));
+    console.println(F("Type 'addr' to change the PCA9685 address or 'advanced' to run the legacy lighting wizard (blink settings)."));
 }
 
 void editIoPortExpander(Config::RuntimeConfig& config, std::vector<PinWizardBinding>& bindings) {
@@ -1127,6 +1159,10 @@ void editIoPortExpander(Config::RuntimeConfig& config, std::vector<PinWizardBind
         }
         if (lower == "?" || lower == "help" || lower == "tokens") {
             printIoPortTokenHelp();
+            continue;
+        }
+        if (lower == "addr" || lower == "address" || lower == "pca addr") {
+            editPcaAddress(config.lighting);
             continue;
         }
         if (lower == "advanced" || lower == "legacy" || lower == "full") {
@@ -1202,6 +1238,88 @@ void editIoPortExpander(Config::RuntimeConfig& config, std::vector<PinWizardBind
 
     if (!wizardAbortRequested_) {
         console.println(F("Leaving PWM IO port expander editor."));
+    }
+}
+
+void printDriverTokenHelp() {
+    console.println(F("Driver tokens:"));
+    console.println(F("  lma_pwm,lma_in1,lma_in2,lmb_pwm,lmb_in1,lmb_in2,left_stby"));
+    console.println(F("  rma_pwm,rma_in1,rma_in2,rmb_pwm,rmb_in1,rmb_in2,right_stby"));
+    console.println(F("Use '<token>=<value>' (pcf#/GPIO) or type the token to inspect it."));
+    console.println(F("Type 'left' or 'right' to open the guided forms for that driver."));
+}
+
+void editDriverExpander(Config::RuntimeConfig& config, std::vector<PinWizardBinding>& bindings) {
+    console.println(F("Drive module editor. Type '?' for token help, 'done' to return."));
+    bool exitRequested = false;
+    while (!exitRequested && !wizardAbortRequested_) {
+        renderDriverExpanderSummary(config);
+        console.print(F("Drive command (? for help, done to exit): "));
+        String line = readLineBlocking();
+        if (wizardAbortRequested_) {
+            break;
+        }
+        line.trim();
+        if (line.isEmpty()) {
+            continue;
+        }
+        String lower = line;
+        lower.toLowerCase();
+
+        if (lower == "done" || lower == "exit" || lower == "back" || lower == "finish") {
+            exitRequested = true;
+            break;
+        }
+        if (lower == "diff") {
+            printSessionPinDiff(bindings);
+            continue;
+        }
+        if (lower == "?" || lower == "help" || lower == "tokens") {
+            printDriverTokenHelp();
+            continue;
+        }
+        if (lower == "left" || lower == "left driver") {
+            editDriverPins("Left Driver", config.pins.leftDriver);
+            continue;
+        }
+        if (lower == "right" || lower == "right driver") {
+            editDriverPins("Right Driver", config.pins.rightDriver);
+            continue;
+        }
+
+        int eq = line.indexOf('=');
+        int space = line.indexOf(' ');
+        int split = -1;
+        if (eq >= 0 && (space < 0 || eq < space)) {
+            split = eq;
+        } else if (space >= 0) {
+            split = space;
+        }
+
+        if (split > 0) {
+            String token = line.substring(0, split);
+            token.trim();
+            token.toLowerCase();
+            if (!isDriverTokenName(token)) {
+                console.println(F("Token not part of the drive modules (try lma_*/rma_* etc)."));
+                continue;
+            }
+            if (tryHandleQuickPinEdit(line, bindings)) {
+                continue;
+            }
+        } else if (isDriverTokenName(lower)) {
+            if (tryShowPinBindingValue(lower, bindings)) {
+                continue;
+            }
+        } else {
+            console.println(F("Unknown command. Try '<token>=value', 'left', 'right', or '?'."));
+            continue;
+        }
+
+    }
+
+    if (!wizardAbortRequested_) {
+        console.println(F("Leaving drive module editor."));
     }
 }
 
@@ -1355,8 +1473,9 @@ void printPinWizardHelp() {
     console.println(F("  - Type <token>=<value> for quick edits (pcf# for expander pins)."));
     console.println(F("  - Type a token alone to see its current value."));
     console.println(F("  - Press menu numbers to open grouped editors (1-8)."));
+    console.println(F("  - Option 1 opens the drive module editor for both left/right motors."));
     console.println(F("  - PCA9685 tokens: pca_addr, pca_freq, fl_*/fr_*/rl_*/rr_* for color channels."));
-    console.println(F("  - Option 6 opens the PWM IO port expander; type 'advanced' there for blink settings."));
+    console.println(F("  - Option 6 opens the PWM IO port expander; type 'addr' for PCA address or 'advanced' for blink settings."));
     console.println(F("  - Option 8 opens the PCF8575 IO expander; use 'addr' to change its I2C address."));
     console.println(F("  - 'diff' lists changes relative to when the wizard opened."));
     console.println(F("  - '9' or 'done' finishes and prompts to apply, '0'/'exit' discards changes."));
@@ -1644,11 +1763,9 @@ void runPinWizard() {
         }
 
         bool sectionHandled = false;
-        if (lower == "1" || lower == "left" || lower == "left driver") {
-            editDriverPins("Left Driver", temp.pins.leftDriver);
-            sectionHandled = true;
-        } else if (lower == "2" || lower == "right" || lower == "right driver") {
-            editDriverPins("Right Driver", temp.pins.rightDriver);
+        if (lower == "1" || lower == "2" || lower == "drive" || lower == "drives" ||
+            lower == "left driver" || lower == "right driver" || lower == "left" || lower == "right") {
+            editDriverExpander(temp, bindings);
             sectionHandled = true;
         } else if (lower == "3" || lower == "peripheral" || lower == "peripherals" || lower == "lights") {
             editPeripheralPins(temp.pins);
@@ -1661,9 +1778,6 @@ void runPinWizard() {
             sectionHandled = true;
         } else if (lower == "6" || lower == "lighting" || lower == "io" || lower == "expander" || lower == "io port") {
             editIoPortExpander(temp, bindings);
-            sectionHandled = true;
-        } else if (lower == "7" || lower == "pca") {
-            editPcaAddress(temp.lighting);
             sectionHandled = true;
         } else if (lower == "8" || lower == "pcf" || lower == "pcf io" || lower == "pcf expander") {
             editPcfExpander(temp, bindings);
