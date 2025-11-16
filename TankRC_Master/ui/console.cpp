@@ -585,6 +585,55 @@ void configureChannel(const char* label, Config::ChannelPins& pins) {
     pins.in2 = promptPinValue("  IN2", pins.in2);
 }
 
+void editDriverPins(const char* label, Config::DriverPins& pins) {
+    String base = label;
+    configureChannel((base + " Motor A").c_str(), pins.motorA);
+    if (wizardAbortRequested_) return;
+    configureChannel((base + " Motor B").c_str(), pins.motorB);
+    if (wizardAbortRequested_) return;
+    pins.standby = promptPinValue(base + " STBY", pins.standby);
+}
+
+void editPeripheralPins(Config::PinAssignments& pins) {
+    pins.lightBar = promptPinValue("Light bar pin", pins.lightBar);
+    if (wizardAbortRequested_) return;
+    pins.speaker = promptPinValue("Speaker pin", pins.speaker);
+    if (wizardAbortRequested_) return;
+    pins.batterySense = promptPinValue("Battery sense pin", pins.batterySense);
+}
+
+void editSlaveLinkPins(Config::PinAssignments& pins) {
+    pins.slaveTx = promptInt("Slave link TX pin", pins.slaveTx);
+    if (wizardAbortRequested_) return;
+    pins.slaveRx = promptInt("Slave link RX pin", pins.slaveRx);
+}
+
+void editPcfAddress(Config::PinAssignments& pins) {
+    pins.pcfAddress = promptInt("PCF8575 I2C address (decimal)", pins.pcfAddress);
+}
+
+void showPinSummary(const Config::RuntimeConfig& config) {
+    const auto& pins = config.pins;
+    console.println(F("--- Pin Summary ---"));
+    auto printChannel = [&](const char* name, const Config::ChannelPins& ch) {
+        String in1 = formatPinValue(ch.in1);
+        String in2 = formatPinValue(ch.in2);
+        console.printf("%s PWM:%d IN1:%s IN2:%s\n", name, ch.pwm, in1.c_str(), in2.c_str());
+    };
+    printChannel("Left A", pins.leftDriver.motorA);
+    printChannel("Left B", pins.leftDriver.motorB);
+    printChannel("Right A", pins.rightDriver.motorA);
+    printChannel("Right B", pins.rightDriver.motorB);
+    String leftStby = formatPinValue(pins.leftDriver.standby);
+    String rightStby = formatPinValue(pins.rightDriver.standby);
+    console.printf("Left STBY:%s | Right STBY:%s\n", leftStby.c_str(), rightStby.c_str());
+    String light = formatPinValue(pins.lightBar);
+    String speaker = formatPinValue(pins.speaker);
+    String battery = formatPinValue(pins.batterySense);
+    console.printf("Light:%s Speaker:%s Battery:%s\n", light.c_str(), speaker.c_str(), battery.c_str());
+    console.printf("Slave TX/RX: %d/%d | PCF addr: %d\n", pins.slaveTx, pins.slaveRx, pins.pcfAddress);
+}
+
 void configureRgbChannel(const char* label, Config::RgbChannel& rgb) {
     console.println(label);
     rgb.r = promptInt("  Red channel", rgb.r);
@@ -826,52 +875,68 @@ void runPinWizard() {
     beginWizardSession();
 
     Config::RuntimeConfig temp = *ctx_.config;
-    console.println(F("Pin assignment wizard. Press Enter to keep the current value, or type 'q' to exit early."));
+    console.println(F("Pin assignment wizard. Edit individual sections or exit when finished."));
 
-    bool aborted = false;
+    bool exitRequested = false;
+    while (!exitRequested && !wizardAbortRequested_) {
+        showPinSummary(temp);
+        console.println(F("-----------------------------"));
+        console.println(F("1) Edit left driver"));
+        console.println(F("2) Edit right driver"));
+        console.println(F("3) Edit light/speaker/battery pins"));
+        console.println(F("4) Edit slave link TX/RX"));
+        console.println(F("5) Edit RC receiver pins"));
+        console.println(F("6) Edit lighting config"));
+        console.println(F("7) Edit PCF8575 address"));
+        console.println(F("8) Finish wizard"));
+        console.println(F("0) Exit without finish"));
+        const int choice = promptInt("Select option", 8);
+        if (wizardAbortRequested_) {
+            break;
+        }
+        switch (choice) {
+            case 1:
+                editDriverPins("Left Driver", temp.pins.leftDriver);
+                break;
+            case 2:
+                editDriverPins("Right Driver", temp.pins.rightDriver);
+                break;
+            case 3:
+                editPeripheralPins(temp.pins);
+                break;
+            case 4:
+                editSlaveLinkPins(temp.pins);
+                break;
+            case 5:
+                configureRcPins(temp.rc);
+                break;
+            case 6:
+                configureLighting(temp.lighting);
+                break;
+            case 7:
+                editPcfAddress(temp.pins);
+                break;
+            case 8:
+                exitRequested = true;
+                break;
+            case 0:
+                exitRequested = true;
+                break;
+            default:
+                console.println(F("Invalid selection."));
+                break;
+        }
+    }
 
-    do {
-        configureChannel("Left Driver Motor A", temp.pins.leftDriver.motorA);
-        if (wizardAbortRequested_) { aborted = true; break; }
-        configureChannel("Left Driver Motor B", temp.pins.leftDriver.motorB);
-        if (wizardAbortRequested_) { aborted = true; break; }
-        temp.pins.leftDriver.standby = promptPinValue("Left driver STBY", temp.pins.leftDriver.standby);
-        if (wizardAbortRequested_) { aborted = true; break; }
-
-        configureChannel("Right Driver Motor A", temp.pins.rightDriver.motorA);
-        if (wizardAbortRequested_) { aborted = true; break; }
-        configureChannel("Right Driver Motor B", temp.pins.rightDriver.motorB);
-        if (wizardAbortRequested_) { aborted = true; break; }
-        temp.pins.rightDriver.standby = promptPinValue("Right driver STBY", temp.pins.rightDriver.standby);
-        if (wizardAbortRequested_) { aborted = true; break; }
-
-        temp.pins.lightBar = promptPinValue("Light bar pin", temp.pins.lightBar);
-        if (wizardAbortRequested_) { aborted = true; break; }
-        temp.pins.speaker = promptPinValue("Speaker pin", temp.pins.speaker);
-        if (wizardAbortRequested_) { aborted = true; break; }
-        temp.pins.batterySense = promptPinValue("Battery sense pin", temp.pins.batterySense);
-        if (wizardAbortRequested_) { aborted = true; break; }
-        temp.pins.slaveTx = promptInt("Slave link TX pin", temp.pins.slaveTx);
-        if (wizardAbortRequested_) { aborted = true; break; }
-        temp.pins.slaveRx = promptInt("Slave link RX pin", temp.pins.slaveRx);
-        if (wizardAbortRequested_) { aborted = true; break; }
-        temp.pins.pcfAddress = promptInt("PCF8575 I2C address (decimal)", temp.pins.pcfAddress);
-        if (wizardAbortRequested_) { aborted = true; break; }
-        configureRcPins(temp.rc);
-        if (wizardAbortRequested_) { aborted = true; break; }
-        configureLighting(temp.lighting);
-        if (wizardAbortRequested_) { aborted = true; break; }
-    } while (false);
-
+    bool aborted = wizardAbortRequested_;
     if (wizardAbortRequested_) {
         wizardAbortRequested_ = false;
     }
 
-    if (aborted) {
-        console.println(F("Pin wizard exited early. Changes entered so far can still be applied."));
+    bool apply = false;
+    if (!aborted) {
+        apply = promptBool("Apply these changes?", true);
     }
-
-    const bool apply = promptBool(aborted ? "Apply the changes made so far?" : "Apply these changes?", true);
     if (apply) {
         *ctx_.config = temp;
         if (applyCallback_) {
