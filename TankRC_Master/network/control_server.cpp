@@ -374,6 +374,9 @@ header.hero {
 .feature-card small { color:var(--muted); }
 .feature-card label { display:flex; align-items:center; justify-content:space-between; }
 .feature-card input[type="checkbox"] { transform:scale(1.2); margin-right:0.3rem; }
+.feature-status { font-size:0.85rem; font-weight:600; letter-spacing:0.04em; }
+.feature-status.enabled { color:var(--accent); }
+.feature-status.disabled { color:#f4f6ff; opacity:0.6; }
 .test-panel ul { margin:0.75rem 0 0; padding-left:1rem; color:var(--muted); }
 .tabs { display:flex; gap:0.5rem; }
 .tabs button {
@@ -400,6 +403,7 @@ header.hero {
     display:flex;
     flex-direction:column;
     gap:0.5rem;
+    position:relative;
 }
 .pin-card__head {
     display:flex;
@@ -433,6 +437,74 @@ header.hero {
     cursor:pointer;
 }
 .pin-card__hint { color:var(--muted); font-size:0.75rem; margin:0; }
+.pin-card__suggestions {
+    display:flex;
+    flex-wrap:wrap;
+    gap:0.4rem;
+    margin:0.5rem 0;
+}
+.pin-card__suggestions button {
+    border:none;
+    border-radius:999px;
+    padding:0.2rem 0.8rem;
+    background:rgba(255,255,255,0.08);
+    color:var(--text);
+    cursor:pointer;
+    transition:background 0.2s ease;
+}
+.pin-card__suggestions button:hover {
+    background:rgba(255,255,255,0.18);
+}
+.pin-card__overlay, .pin-card__board-popup {
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    background:rgba(0,0,0,0.85);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:12px;
+    padding:1rem;
+    width:260px;
+    text-align:center;
+    box-shadow:0 15px 40px rgba(0,0,0,0.5);
+    z-index:10;
+}
+.pin-card__overlay.hidden, .pin-card__board-popup.hidden {
+    display:none;
+}
+.pin-card__overlay-buttons {
+    display:flex;
+    justify-content:space-between;
+    gap:0.5rem;
+    margin-top:0.8rem;
+}
+.pin-card__board {
+    margin-top:0.6rem;
+    border:none;
+    background:rgba(255,255,255,0.08);
+    color:var(--text);
+    border-radius:10px;
+    padding:0.4rem 0.8rem;
+    cursor:pointer;
+}
+.pin-card__board-popup {
+    display:flex;
+    flex-direction:column;
+    gap:0.4rem;
+}
+.pin-card__board-options {
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+    gap:0.4rem;
+}
+.pin-card__board-option {
+    border:none;
+    border-radius:8px;
+    padding:0.3rem 0.4rem;
+    background:rgba(255,255,255,0.07);
+    color:var(--text);
+    cursor:pointer;
+}
 .pin-card__message { min-height:1.25rem; font-size:0.8rem; }
 .pin-card__message.success { color:var(--accent); }
 .pin-card__message.error { color:var(--danger); }
@@ -523,6 +595,9 @@ const toast = document.getElementById('toast');
 const boardButtons = document.querySelectorAll('[data-board]');
 const statusBadge = document.getElementById('statusBadge');
 const refreshIntervalMs = 4000;
+const pinInputState = {};
+const boardOverrides = loadBoardOverrides();
+const boardList = Array.from(new Set(pinSchema.map(entry => entry.board)));
 
 function showToast(message, tone = 'info') {
     toast.textContent = message;
@@ -543,6 +618,55 @@ function formatPinValue(value) {
         return 'unassigned';
     }
     return String(value);
+}
+
+function formatPinKey(value) {
+    if (value === undefined || value === null) {
+        return '';
+    }
+    if (typeof value === 'number') {
+        if (value <= -2) {
+            return `pcf${-value - 2}`;
+        }
+        return String(value);
+    }
+    return String(value);
+}
+
+function loadBoardOverrides() {
+    try {
+        const stored = localStorage.getItem('pinBoardOverride');
+        return stored ? JSON.parse(stored) : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveBoardOverrides() {
+    localStorage.setItem('pinBoardOverride', JSON.stringify(boardOverrides));
+}
+
+function getEntryBoard(entry) {
+    return boardOverrides[entry.token] || entry.board;
+}
+
+function gatherAssignedPins() {
+    const map = new Map();
+    for (const entry of pinSchema) {
+        const value = getValueFromPath(entry.path);
+        if (value === null || value === undefined) {
+            continue;
+        }
+        if (value === -1) {
+            continue;
+        }
+        const key = formatPinKey(value);
+        if (!key) {
+            continue;
+        }
+        map.set(key, entry);
+    }
+    return map;
 }
 
 function getValueFromPath(path) {
@@ -573,13 +697,27 @@ function renderFeatureToggles() {
     for (const field of featureFields) {
         const card = document.createElement('article');
         card.className = 'feature-card';
-        card.innerHTML = `<strong>${field.label}</strong><small>${field.description}</small><label><span>Enabled</span><input type="checkbox" data-field="${field.key}" /></label>`;
+        card.innerHTML = `
+            <strong>${field.label}</strong>
+            <small>${field.description}</small>
+            <label>
+                <span class="feature-status ${config.features[field.key] ? 'enabled' : 'disabled'}">
+                    ${config.features[field.key] ? 'Enabled' : 'Disabled'}
+                </span>
+                <input type="checkbox" data-field="${field.key}" />
+            </label>`;
         const input = card.querySelector('input');
+        const status = card.querySelector('.feature-status');
         input.checked = !!config.features[field.key];
         input.addEventListener('change', () => {
             postConfig({ [field.key]: input.checked ? '1' : '0' })
                 .then(refreshConfig)
-                .then(() => showToast(`${field.label} ${input.checked ? 'enabled' : 'disabled'}`))
+                .then(() => {
+                    status.textContent = input.checked ? 'Enabled' : 'Disabled';
+                    status.classList.toggle('enabled', input.checked);
+                    status.classList.toggle('disabled', !input.checked);
+                    showToast(`${field.label} ${input.checked ? 'enabled' : 'disabled'}`);
+                })
                 .catch(err => showToast(err.message, 'danger'));
         });
         featureGrid.appendChild(card);
@@ -622,7 +760,8 @@ function renderPinCards() {
         pinGrid.innerHTML = '';
         return;
     }
-    const entries = pinSchema.filter(entry => entry.board === activeBoard);
+    const assigned = gatherAssignedPins();
+    const entries = pinSchema.filter(entry => getEntryBoard(entry) === activeBoard);
     pinGrid.innerHTML = entries.map((entry, index) => {
         const currentValue = formatPinValue(getValueFromPath(entry.path));
         const hints = [];
@@ -633,7 +772,7 @@ function renderPinCards() {
             hints.push(entry.hint);
         }
         return `
-            <article class="pin-card" data-index="${index}">
+            <article class="pin-card" data-index="${index}" data-token="${entry.token}">
                 <div class="pin-card__head">
                     <div>
                         <strong>${entry.label}</strong>
@@ -643,11 +782,24 @@ function renderPinCards() {
                 </div>
                 <p class="pin-card__desc">${entry.description}</p>
                 <div class="pin-card__input">
-                    <input type="text" placeholder="GPIO, pcf#, or none" data-token="${entry.token}" />
+                    <input type="text" placeholder="GPIO, pcf#, or none" data-token="${entry.token}" value="${pinInputState[entry.token] || ''}" />
                     <button type="button">Set</button>
                 </div>
+                <div class="pin-card__suggestions" data-token="${entry.token}"></div>
                 <small class="pin-card__hint">${entry.type}${hints.length ? ' • ' + hints.join(' • ') : ''}</small>
                 <div class="pin-card__message" aria-live="polite"></div>
+                <button type="button" class="pin-card__board">Move board</button>
+                <div class="pin-card__overlay hidden">
+                    <p>Pin currently assigned to <span class="overlay-source"></span>. Overwrite?</p>
+                    <div class="pin-card__overlay-buttons">
+                        <button type="button" class="overlay-confirm">Overwrite</button>
+                        <button type="button" class="overlay-cancel">Cancel</button>
+                    </div>
+                </div>
+                <div class="pin-card__board-popup hidden">
+                    <p>Choose target board</p>
+                    <div class="pin-card__board-options"></div>
+                </div>
             </article>
         `;
     }).join('');
@@ -656,29 +808,118 @@ function renderPinCards() {
         const button = card.querySelector('button');
         const message = card.querySelector('.pin-card__message');
         const entry = entries[Number(card.dataset.index)];
-        button.addEventListener('click', () => {
-            const result = validatePinValue(entry, input.value);
-            if (!result.valid) {
-                message.textContent = result.message;
-                message.className = 'pin-card__message error';
-                return;
-            }
-            message.textContent = 'Saving…';
-            message.className = 'pin-card__message';
-            const payload = { [entry.token]: result.value };
-            postConfig(payload)
-                .then(() => refreshConfig())
-                .then(() => {
-                    message.textContent = 'Updated';
-                    message.className = 'pin-card__message success';
-                    input.value = '';
-                })
-                .catch(err => {
-                    message.textContent = err.message;
-                    message.className = 'pin-card__message error';
-                });
+        const suggestions = card.querySelector('.pin-card__suggestions');
+        const overlay = card.querySelector('.pin-card__overlay');
+        const overlaySource = overlay.querySelector('.overlay-source');
+        const overlayConfirm = overlay.querySelector('.overlay-confirm');
+        const overlayCancel = overlay.querySelector('.overlay-cancel');
+        const boardBtn = card.querySelector('.pin-card__board');
+        const boardPopup = card.querySelector('.pin-card__board-popup');
+        const boardOptions = boardPopup.querySelector('.pin-card__board-options');
+        updateSuggestions(entry, suggestions, assigned, input);
+        input.addEventListener('input', () => {
+            pinInputState[entry.token] = input.value;
+            updateSuggestions(entry, suggestions, assigned, input);
+        });
+        button.addEventListener('click', () => handleSetRequest(entry, input, message, assigned, overlay, overlaySource));
+        overlayConfirm.addEventListener('click', () => {
+            overlay.classList.add('hidden');
+            handleSetRequest(entry, input, message, assigned, null, null, true);
+        });
+        overlayCancel.addEventListener('click', () => overlay.classList.add('hidden'));
+        const targetBoards = boardList.filter(board => board !== getEntryBoard(entry));
+        boardOptions.innerHTML = targetBoards.length
+            ? targetBoards.map(board => `<button type="button" class="pin-card__board-option" data-board="${board}">${board}</button>`).join('')
+            : '<span style="font-size:0.85rem;color:var(--muted);">No alternative boards</span>';
+        boardOptions.querySelectorAll('.pin-card__board-option').forEach(opt => {
+            opt.addEventListener('click', () => {
+                boardOverrides[entry.token] = opt.dataset.board;
+                saveBoardOverrides();
+                boardPopup.classList.add('hidden');
+                renderPinCards();
+            });
+        });
+        boardBtn.addEventListener('click', () => {
+            boardPopup.classList.toggle('hidden');
         });
     });
+}
+
+function updateSuggestions(entry, container, assignedMap, input) {
+    const options = computeFreePins(entry, assignedMap);
+    if (!options.length) {
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = options.map(value => `<button type="button" data-value="${value}">${value}</button>`).join('');
+    container.querySelectorAll('button').forEach(button => {
+        button.addEventListener('click', () => {
+            input.value = button.dataset.value;
+            pinInputState[entry.token] = input.value;
+        });
+    });
+}
+
+function computeFreePins(entry, assignedMap) {
+    const used = new Set();
+    assignedMap.forEach((assignedEntry, key) => {
+        if (assignedEntry.token !== entry.token) {
+            used.add(key);
+        }
+    });
+    const options = [];
+    const start = Math.max(0, entry.minValue >= 0 ? entry.minValue : 0);
+    const end = entry.maxValue >= 0 ? entry.maxValue : 39;
+    for (let pin = start; pin <= end && options.length < 5; pin++) {
+        const key = String(pin);
+        if (!used.has(key)) {
+            options.push(key);
+        }
+    }
+    if (entry.allowPcf) {
+        for (let idx = 0; idx < 16 && options.length < 5; idx++) {
+            const key = `pcf${idx}`;
+            if (!used.has(key)) {
+                options.push(key);
+            }
+        }
+    }
+    return options;
+}
+
+function handleSetRequest(entry, input, message, assignedMap, overlay, overlaySource, forced = false) {
+    const result = validatePinValue(entry, input.value);
+    if (!result.valid) {
+        message.textContent = result.message;
+        message.className = 'pin-card__message error';
+        return;
+    }
+    const freshAssigned = gatherAssignedPins();
+    const conflict = freshAssigned.get(result.value);
+    if (conflict && conflict.token !== entry.token && overlay && !forced) {
+        overlaySource.textContent = conflict.label;
+        overlay.classList.remove('hidden');
+        return;
+    }
+    applyPinChange(entry, input, message, result.value);
+}
+
+function applyPinChange(entry, input, message, value) {
+    message.textContent = 'Saving…';
+    message.className = 'pin-card__message';
+    const payload = { [entry.token]: value };
+    postConfig(payload)
+        .then(() => refreshConfig())
+        .then(() => {
+            message.textContent = 'Updated';
+            message.className = 'pin-card__message success';
+            input.value = '';
+            pinInputState[entry.token] = '';
+        })
+        .catch(err => {
+            message.textContent = err.message;
+            message.className = 'pin-card__message error';
+        });
 }
 
 async function fetchJson(path) {
