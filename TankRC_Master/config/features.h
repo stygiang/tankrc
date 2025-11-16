@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef FEATURE_WIFI
-#define FEATURE_WIFI 0
+#define FEATURE_WIFI 1
 #endif
 
 #ifndef FEATURE_ULTRASONIC

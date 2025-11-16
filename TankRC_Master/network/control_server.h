@@ -55,6 +55,7 @@ class ControlServer {
     void handleControlPost();
     String buildStatusJson() const;
     String buildConfigJson(bool includeSensitive = false) const;
+    String buildPinSchemaJson() const;
     void sendJson(const String& body);
 
     WifiManager* wifi_ = nullptr;

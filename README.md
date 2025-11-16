@@ -15,13 +15,15 @@ Modular ESP-based tank-style RC platform. This repo focuses on keeping each feat
 Open `tankrc.ino` inside the Arduino IDE (the folder name already matches) and the IDE will pull in every `.cpp/.h` that sits next to the sketch.
 
 ## Serial configuration & test console
-Open a serial monitor at 115200 baud and type `help` to launch the interactive wizard. You can:
-- Reassign any motor/feature pins without recompiling (`wizard pins`), then save them to flash.
-- Enable/disable feature modules (`wizard features`), useful when hardware isn't installed yet.
-- Run the bundled test suite (`wizard test`) to sweep the tank drive, blink the light bar, pulse the speaker, and read battery voltage before heading into the field.
-- Configure the UART bridge to your drive slave (`slave_tx` / `slave_rx` tokens or through the pin wizard). By default the master uses TX=17, RX=16; cross them to the slave ESP32 and share ground so the master can stream drive commands + configuration downstream.
+Open a serial monitor at 115200 baud and type `help` to see the slimmed-down console dashboard. The serial wizard now focuses on feature control and diagnostics: pin assignments and ownership are managed through the web UI (see below).
+- `menu` launches the new dashboard that exposes feature toggles and diagnostics.
+- `features` toggles lights, sound, Wi-Fi, sensors, and tip-over protection.
+- `tests` runs the motor sweep, sound pulse, and battery voltage routines.
+- `save`, `load`, `defaults`, and `reset` still manage stored settings and factory presets.
 
-Settings survive power cycles via the on-board NVS/Preferences store, and you can revert to defaults anytime with the `defaults` command.
+UART pin roles (`slave_tx` / `slave_rx`), PCA address, and every motor/lighting pin are now documented on the Control Hub, so use the web UI when rewiring or swapping hardware.
+
+Settings survive power cycles via the on-board NVS/Preferences store.
 
 ## RC receiver mapping
 The built-in six-channel receiver driver interprets standard 1–2 ms PWM signals:
@@ -45,16 +47,14 @@ Four RGB assemblies (front-left/right headlights and rear-left/right reverse lig
 Address, frequency, RGB channel assignments, and blink behaviors are all editable from the serial wizard so you can match whatever wiring layout you prefer.
 
 ## Wi-Fi control panel
-_Note:_ To keep the core RC loop stable on low-power setups, the firmware ships with networking disabled (`TANKRC_ENABLE_NETWORK=0`). Flip it to `1` once you’re ready for Wi-Fi/web control.
+_Note:_ To keep the core RC loop stable on low-power setups, networking is disabled (`TANKRC_ENABLE_NETWORK=0`) by default. Flip it to `1` once you’re ready for Wi-Fi/web control.
 
-Once the ESP32 joins your Wi-Fi (or exposes its fallback `TankRC-Setup` access point), open `http://<device-ip>/` to launch the TankRC Control Hub. The web UI mirrors the serial wizard, adds live telemetry, a styled mock RC model, and manual overrides (hazard/lighting) without leaving your browser:
-- Update Wi-Fi credentials, PCA9685 address/frequency, and feature toggles in one place.
-- Watch real-time steering/throttle/ultrasonic data animate the mock tank.
-- Trigger hazard flashers or force lighting states directly from the UI—useful when the radio is powered down.
-- Default AP credentials: **SSID** `TankRC-Setup`, **password** `tankrc123`.
-- Pull NTP time for accurate timestamps and download session logs (`/api/logs?format=csv`) for tuning or debugging.
-- Back up or restore the entire runtime configuration via the dashboard (JSON export/import) to clone settings across vehicles.
-- Telnet into the remote console (`telnet <ip> 2323`) to run the exact same serial commands over Wi-Fi (requires `TANKRC_ENABLE_NETWORK=1`).
+When the ESP32 joins your Wi-Fi (or exposes its fallback `sharc` access point), point a browser to `http://<device-ip>/` to open the TankRC Control Hub. The refreshed interface now focuses on feature switches, diagnostics, and pin ownership:
+- Feature cards let you toggle lighting, sound, sensors, Wi-Fi, ultrasonic sensors, and tip-over handling without running `wizard features`.
+- The dashboard surface-updates RC/Wi-Fi status, mode, and the same telemetry that previously animated the mock tank.
+- Pin assignment cards display every GPIO/PCF entry per board, grouped under master/slave tabs, with hints about the owner, type (PWM, UART, lighting, etc.), and whether the expander is allowed. Cards validate input and push changes directly via `/api/config`.
+- Download session logs (`/api/logs?format=csv`), back up the runtime configuration (JSON export/import), or telnet into the remote console (`telnet <ip> 2323`) to replay serial commands over Wi-Fi.
+- Default fallback AP: **SSID** `sharc`, **password** `tankrc123`.
 
 Changes saved through the web interface persist via NVS and automatically reconfigure the firmware.
 

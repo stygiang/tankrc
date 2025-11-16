@@ -22,13 +22,10 @@ class WifiManager {
     String apSsid() const { return String(config_.wifi.apSsid); }
 
   private:
-    void connectStation();
     void startAp();
 
     Config::RuntimeConfig config_{};
-    unsigned long lastAttemptMs_ = 0UL;
     bool apMode_ = false;
-    bool stationConnecting_ = false;
 };
 }  // namespace TankRC::Network
 #endif  // TANKRC_NETWORK_WIFI_MANAGER_H

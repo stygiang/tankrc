@@ -1,3 +1,5 @@
+#include "config/build_config.h"
+
 // Arduino IDE/arduino-cli only compile sources at the sketch root.
 // Pull in every module implementation here so they build as one TU.
 // PlatformIO sees the actual .cpp files, so we disable this include fan-out there.

@@ -2,15 +2,18 @@
 #define TANKRC_BUILD_MASTER 1
 #endif
 
-#include "config/features.h"
-
-#ifndef TANKRC_ENABLE_NETWORK
-#define TANKRC_ENABLE_NETWORK FEATURE_WIFI
+#ifndef TANKRC_FORCE_NETWORK
+#define TANKRC_FORCE_NETWORK 1
 #endif
 
-#ifndef TANKRC_USE_DRIVE_PROXY
-#define TANKRC_USE_DRIVE_PROXY 1
+#if TANKRC_FORCE_NETWORK
+#ifdef TANKRC_ENABLE_NETWORK
+#undef TANKRC_ENABLE_NETWORK
 #endif
+#define TANKRC_ENABLE_NETWORK 1
+#endif
+
+#include "config/build_config.h"
 
 #include <algorithm>
 
@@ -301,6 +304,11 @@ void taskOutputs() {
 }
 
 void taskHousekeeping() {
+    Events::process();
+    UI::update();
+}
+
+void loop() {
 #if TANKRC_ENABLE_NETWORK
     if (networkActive) {
         wifiManager.loop();
@@ -309,11 +317,6 @@ void taskHousekeeping() {
         remoteConsole.loop();
     }
 #endif
-    Events::process();
-    UI::update();
-}
-
-void loop() {
     if (UI::isWizardActive()) {
         Core::serviceWatchdog();
         Hal::delayMs(1);

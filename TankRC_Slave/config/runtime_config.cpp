@@ -42,7 +42,7 @@ RuntimeConfig makeDefaultConfig() {
 
     std::strncpy(config.wifi.ssid, "", sizeof(config.wifi.ssid));
     std::strncpy(config.wifi.password, "", sizeof(config.wifi.password));
-    std::strncpy(config.wifi.apSsid, "TankRC-Setup", sizeof(config.wifi.apSsid));
+    std::strncpy(config.wifi.apSsid, "sharc", sizeof(config.wifi.apSsid));
     std::strncpy(config.wifi.apPassword, "tankrc123", sizeof(config.wifi.apPassword));
     config.wifi.ssid[sizeof(config.wifi.ssid) - 1] = '\0';
     config.wifi.password[sizeof(config.wifi.password) - 1] = '\0';

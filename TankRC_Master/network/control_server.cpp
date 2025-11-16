@@ -2,14 +2,15 @@
 
 #include <Arduino.h>
 #include <algorithm>
-#include <cstdint>
 #include <cctype>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <iterator>
 #include <vector>
 
+#include "config/pin_schema.h"
 namespace TankRC::Network {
 namespace {
 
@@ -288,7 +289,7 @@ class JsonStream {
     size_t pos_ = 0;
 };
 
-const char CONTROL_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html>
+const char CONTROL_PAGE_TEMPLATE[] PROGMEM = R"HTML(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -296,632 +297,446 @@ const char CONTROL_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html>
 <title>TankRC Control Hub</title>
 <style>
 :root {
-    --bg:#0c111b;
-    --panel:#161d2b;
-    --accent:#1ecad3;
-    --text:#f4f6ff;
+    --bg:#050b16;
+    --panel:#10182b;
+    --accent:#3be3a4;
+    --accent-dark:#24b784;
+    --text:#f5f7fb;
+    --muted:#8a9db7;
     --warn:#ffb703;
     --danger:#ff3864;
 }
 * { box-sizing:border-box; }
 body {
     margin:0;
+    min-height:100vh;
     font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
-    background:linear-gradient(135deg,#05070c,#111b2f);
     color:var(--text);
-}
-header {
-    padding:1.5rem 2rem;
-    font-size:1.5rem;
-    font-weight:600;
-    letter-spacing:0.05em;
-    background:rgba(0,0,0,0.4);
-    border-bottom:1px solid rgba(255,255,255,0.08);
+    background:linear-gradient(180deg,#04070f,#0d1321 45%,#0c111b);
 }
 main {
+    max-width:1200px;
+    margin:0 auto 3rem;
+    padding:1rem;
+}
+header.hero {
+    background:var(--panel);
+    margin:1rem;
+    border-radius:18px;
+    padding:1.25rem 2rem;
     display:flex;
-    flex-wrap:wrap;
-    gap:1.5rem;
-    padding:1.5rem;
+    justify-content:space-between;
+    align-items:center;
+    gap:1rem;
+    box-shadow:0 20px 50px rgba(0,0,0,0.35);
+}
+.hero h1 { margin:0; font-size:1.8rem; }
+.hero p { margin:0.35rem 0 0; color:var(--muted); }
+.status-tags { display:flex; gap:0.6rem; flex-wrap:wrap; }
+.status-pill {
+    background:rgba(255,255,255,0.08);
+    padding:0.4rem 0.9rem;
+    border-radius:999px;
+    font-size:0.85rem;
+    letter-spacing:0.03em;
 }
 .panel {
     background:var(--panel);
-    border-radius:16px;
-    padding:1.5rem;
-    flex:1 1 320px;
-    box-shadow:0 15px 40px rgba(0,0,0,0.35);
-}
-#rc-model {
-    width:220px;
-    height:140px;
-    margin:0 auto 1rem;
     border-radius:18px;
-    background:linear-gradient(145deg,#1f2a3f,#131b2d);
-    position:relative;
-    transition:transform 0.3s ease;
+    margin:1rem;
+    padding:1.5rem;
+    box-shadow:0 20px 60px rgba(0,0,0,0.45);
 }
-#rc-model.debug { box-shadow:0 0 25px rgba(0,200,255,0.7); }
-#rc-model.locked { box-shadow:0 0 25px rgba(255,56,100,0.8); }
-#rc-model.active { box-shadow:0 0 25px rgba(30,202,211,0.8); }
-#rc-model.hazard { animation:hazardPulse 0.8s ease-in-out infinite; }
-@keyframes hazardPulse {
-    0% { transform:scale(1); }
-    50% { transform:scale(1.03); }
-    100% { transform:scale(1); }
+.panel > header {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:0.5rem;
 }
-.track {
-    position:absolute; top:10px; bottom:10px; width:18px;
-    background:#0b0f18; border-radius:12px;
+.panel h2 { margin:0; font-size:1.25rem; }
+.feature-grid {
+    margin-top:1rem;
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:1rem;
 }
-.track.left { left:-24px; }
-.track.right { right:-24px; }
-.light {
-    position:absolute;
-    width:28px; height:20px;
-    border-radius:12px;
-    filter:blur(0.5px);
-    background:#111;
+.feature-card {
+    border:1px solid rgba(255,255,255,0.06);
+    border-radius:14px;
+    padding:1rem;
+    background:rgba(255,255,255,0.02);
+    display:flex;
+    flex-direction:column;
+    gap:0.75rem;
 }
-.light.head { top:12px; }
-.light.tail { bottom:12px; }
-.light.left { left:18px; }
-.light.right { right:18px; }
-.stats { text-align:center; font-size:0.95rem; opacity:0.85; }
-button, input, select {
-    font:inherit;
-}
-button, .cta {
-    background:var(--accent);
+.feature-card strong { display:block; font-size:1.05rem; }
+.feature-card small { color:var(--muted); }
+.feature-card label { display:flex; align-items:center; justify-content:space-between; }
+.feature-card input[type="checkbox"] { transform:scale(1.2); margin-right:0.3rem; }
+.test-panel ul { margin:0.75rem 0 0; padding-left:1rem; color:var(--muted); }
+.tabs { display:flex; gap:0.5rem; }
+.tabs button {
     border:none;
-    color:#02060e;
-    padding:0.75rem 1.2rem;
+    background:rgba(255,255,255,0.05);
+    color:var(--text);
+    padding:0.45rem 1rem;
     border-radius:999px;
-    font-weight:600;
     cursor:pointer;
-    transition:transform 0.2s ease, box-shadow 0.2s ease;
+    transition:background 0.2s ease;
 }
-button:hover, .cta:hover { transform:translateY(-2px); box-shadow:0 10px 20px rgba(30,202,211,0.35); }
-form label { display:block; margin-top:0.8rem; font-size:0.9rem; text-transform:uppercase; letter-spacing:0.05em; opacity:0.8; }
-form input, form select {
-    width:100%;
-    margin-top:0.3rem;
-    padding:0.6rem;
+.tabs button.active { background:var(--accent); color:#021214; }
+.pin-grid {
+    margin-top:1.25rem;
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+    gap:1rem;
+}
+.pin-card {
+    background:rgba(255,255,255,0.02);
+    border:1px solid rgba(255,255,255,0.07);
+    border-radius:16px;
+    padding:1rem;
+    display:flex;
+    flex-direction:column;
+    gap:0.5rem;
+}
+.pin-card__head {
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:0.5rem;
+}
+.pin-card__head strong { font-size:1rem; }
+.pin-card__owner { font-size:0.8rem; color:var(--muted); }
+.pin-card__value { font-size:0.9rem; font-weight:600; }
+.pin-card__desc { margin:0; color:var(--muted); font-size:0.85rem; }
+.pin-card__input {
+    display:flex;
+    gap:0.5rem;
+}
+.pin-card__input input {
+    flex:1;
+    background:rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.1);
     border-radius:10px;
-    border:1px solid rgba(255,255,255,0.08);
-    background:rgba(5,8,15,0.8);
+    padding:0.45rem 0.75rem;
     color:var(--text);
 }
-.switch-row {
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    padding:0.4rem 0;
+.pin-card__input input::placeholder { color:rgba(255,255,255,0.4); }
+.pin-card__input button {
+    border:none;
+    background:var(--accent);
+    color:#021214;
+    border-radius:10px;
+    padding:0.4rem 0.9rem;
+    cursor:pointer;
 }
-.badge {
-    display:inline-flex;
-    align-items:center;
-    gap:0.4rem;
-    padding:0.25rem 0.65rem;
+.pin-card__hint { color:var(--muted); font-size:0.75rem; margin:0; }
+.pin-card__message { min-height:1.25rem; font-size:0.8rem; }
+.pin-card__message.success { color:var(--accent); }
+.pin-card__message.error { color:var(--danger); }
+.toast {
+    position:fixed;
+    left:50%;
+    bottom:1.5rem;
+    transform:translateX(-50%);
+    background:rgba(15,40,70,0.9);
+    border:1px solid rgba(255,255,255,0.1);
+    padding:0.75rem 1.1rem;
     border-radius:999px;
-    font-size:0.75rem;
-    font-weight:600;
+    display:none;
+    align-items:center;
+    box-shadow:0 15px 30px rgba(0,0,0,0.5);
 }
-.badge.ok { background:rgba(30,202,211,0.2); color:var(--accent); }
-.badge.warn { background:rgba(255,183,3,0.18); color:var(--warn); }
-.badge.danger { background:rgba(255,56,100,0.18); color:var(--danger); }
-.controls-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1rem; }
-.pin-hint { opacity:0.75; font-size:0.85rem; margin-bottom:0.8rem; }
-.driver-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1rem; }
-.driver-card { background:rgba(5,8,15,0.6); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:1rem; box-shadow:0 6px 18px rgba(0,0,0,0.35); }
-.driver-card header { font-size:1.1rem; font-weight:600; margin-bottom:0.6rem; }
-.driver-visual { display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.8rem; opacity:0.7; }
-.driver-visual span { display:block; font-size:0.78rem; }
-.pin-field { margin-bottom:0.6rem; }
-.pin-field label { display:block; font-size:0.85rem; margin-bottom:0.2rem; }
-.pin-input { display:flex; gap:0.4rem; }
-.pin-input input { flex:1; }
-.pin-input button { padding:0.45rem 0.9rem; border-radius:8px; border:none; background:var(--accent); color:#02060e; font-weight:600; cursor:pointer; }
-.pin-input button:hover { filter:brightness(1.05); }
-.pin-input input.pin-saved { box-shadow:0 0 0 2px rgba(30,202,211,0.6); }
-.aux-card { display:flex; flex-direction:column; }
-.pcf-select { min-width:90px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); background:rgba(5,8,15,0.8); color:var(--text); padding:0.4rem; }
-.pcf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:0.6rem; }
-.pcf-cell { padding:0.6rem; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:rgba(5,8,15,0.6); text-align:center; box-shadow:0 4px 12px rgba(0,0,0,0.25); }
-.pcf-cell.assigned { border-color:var(--accent); box-shadow:0 6px 16px rgba(30,202,211,0.3); }
-.pcf-cell strong { display:block; font-size:0.9rem; }
-.pcf-cell span { display:block; margin-top:0.3rem; font-size:0.78rem; opacity:0.8; }
+.toast.show { display:flex; }
+@media (max-width:600px) {
+    header.hero { flex-direction:column; align-items:flex-start; }
+    .panel { margin:0.8rem; }
+}
 </style>
 </head>
 <body>
-<header>TankRC Control Hub</header>
+<header class="hero">
+    <div>
+        <h1>TankRC Control Hub</h1>
+        <p>Connect to the "sharc" access point to reach this page from the master tank.</p>
+    </div>
+    <div class="status-tags" id="statusList">
+        <span class="status-pill" id="statusBadge">Connecting...</span>
+    </div>
+</header>
 <main>
-<section class="panel" id="model-panel">
-    <h2>Vehicle Status</h2>
-    <div id="rc-model">
-        <div class="track left"></div>
-        <div class="track right"></div>
-        <div class="light head left"></div>
-        <div class="light head right"></div>
-        <div class="light tail left"></div>
-        <div class="light tail right"></div>
-    </div>
-    <div class="stats" id="status-text">Connecting...</div>
-</section>
-<section class="panel">
-    <h2>Manual Overrides</h2>
-    <div class="switch-row">
-        <span>Hazard Lights</span>
-        <label><input type="checkbox" id="hazardToggle" /> Enable</label>
-    </div>
-    <div class="switch-row">
-        <span>Lighting</span>
-        <label><input type="checkbox" id="lightsToggle" /> Force On</label>
-    </div>
-    <div style="margin-top:1rem;">
-        <button id="clearOverrides">Return to RC Control</button>
-        <a class="cta" style="display:block;margin-top:0.75rem;text-align:center;" href="/api/logs?format=csv" target="_blank">Download Log CSV</a>
-    </div>
-    <h3 style="margin-top:1.5rem;">Live Telemetry</h3>
-    <div class="controls-grid" id="telemetry"></div>
-</section>
-<section class="panel">
-    <h2>Wi-Fi & Features</h2>
-    <form id="configForm">
-        <label>Wi-Fi SSID<input type="text" id="ssid" maxlength="31" placeholder="Home WiFi" /></label>
-        <label>Wi-Fi Password<input type="password" id="password" maxlength="63" /></label>
-        <label>AP SSID<input type="text" id="apSsid" maxlength="31" /></label>
-        <label>AP Password<input type="password" id="apPassword" maxlength="63" /></label>
-        <label>PCA9685 Address<input type="number" id="pcaAddress" min="0" max="127" /></label>
-        <label>PCA9685 Frequency (Hz)<input type="number" id="pwmFrequency" min="40" max="1600" /></label>
-        <div class="switch-row">
-            <span>Lighting Enabled</span>
-            <label><input type="checkbox" id="lightingEnabled" /></label>
-        </div>
-        <div class="switch-row">
-            <span>Sound Enabled</span>
-            <label><input type="checkbox" id="soundEnabled" /></label>
-        </div>
-        <div class="switch-row">
-            <span>Wi-Fi Enabled</span>
-            <label><input type="checkbox" id="wifiEnabled" /></label>
-        </div>
-        <div class="switch-row">
-            <span>Ultrasonic Enabled</span>
-            <label><input type="checkbox" id="ultrasonicEnabled" /></label>
-        </div>
-        <div class="switch-row">
-            <span>Tip-over Enabled</span>
-            <label><input type="checkbox" id="tipEnabled" /></label>
-        </div>
-        <div class="switch-row">
-            <span>Wi-Fi Alert Blink</span>
-            <label><input type="checkbox" id="blinkWifi" /></label>
-        </div>
-        <div class="switch-row">
-            <span>RC Alert Blink</span>
-            <label><input type="checkbox" id="blinkRc" /></label>
-        </div>
-        <label>Blink Period (ms)<input type="number" id="blinkPeriod" min="100" max="2000" /></label>
-        <div class="switch-row">
-            <span>Config Backup</span>
-            <a class="cta" href="/api/config/export" target="_blank">Download JSON</a>
-        </div>
-        <label>Import Config<input type="file" id="configFile" accept="application/json" /></label>
-        <button type="button" class="cta" id="importConfig" style="margin-top:0.5rem; width:100%;">Import Config</button>
-        <button type="submit" class="cta" style="margin-top:1rem; width:100%;">Save & Apply</button>
-    </form>
-</section>
-<section class="panel">
-    <h2>Motor Driver Pins</h2>
-    <p class="pin-hint">Use GPIO numbers for native pins or type <code>pcf#</code> (e.g. <code>pcf3</code>) for expander lines. Click Update next to any field to push that pin immediately, or use Save & Apply for bulk edits.</p>
-    <div class="driver-grid">
-        <article class="driver-card">
-            <header>Left Driver</header>
-            <div class="driver-visual">
-                <div><strong>Motor A</strong><span>PWM → IN1 → IN2</span></div>
-                <div><strong>Motor B</strong><span>PWM → IN1 → IN2</span></div>
+    <section class="panel">
+        <header>
+            <div>
+                <h2>Feature toggles</h2>
+                <p style="margin:0; color:var(--muted);">Flip lights, sound, sensors, Wi-Fi, and tip-over protection.</p>
             </div>
-            <div class="pin-field"><label>Motor A PWM</label><div class="pin-input"><input type="number" id="leftA_pwm" /><button type="button" data-pin-btn="leftA_pwm">Update</button></div></div>
-            <div class="pin-field"><label>Motor A IN1</label><div class="pin-input"><input type="text" id="leftA_in1" placeholder="pcf3" /><button type="button" data-pin-btn="leftA_in1">Update</button></div></div>
-            <div class="pin-field"><label>Motor A IN2</label><div class="pin-input"><input type="text" id="leftA_in2" placeholder="pcf4" /><button type="button" data-pin-btn="leftA_in2">Update</button></div></div>
-            <div class="pin-field"><label>Motor B PWM</label><div class="pin-input"><input type="number" id="leftB_pwm" /><button type="button" data-pin-btn="leftB_pwm">Update</button></div></div>
-            <div class="pin-field"><label>Motor B IN1</label><div class="pin-input"><input type="text" id="leftB_in1" /><button type="button" data-pin-btn="leftB_in1">Update</button></div></div>
-            <div class="pin-field"><label>Motor B IN2</label><div class="pin-input"><input type="text" id="leftB_in2" /><button type="button" data-pin-btn="leftB_in2">Update</button></div></div>
-            <div class="pin-field"><label>Driver STBY</label><div class="pin-input"><input type="text" id="left_stby" /><button type="button" data-pin-btn="left_stby">Update</button></div></div>
-        </article>
-        <article class="driver-card">
-            <header>Right Driver</header>
-            <div class="driver-visual">
-                <div><strong>Motor A</strong><span>PWM → IN1 → IN2</span></div>
-                <div><strong>Motor B</strong><span>PWM → IN1 → IN2</span></div>
+            <div class="status-pill">AP: sharc</div>
+        </header>
+        <div class="feature-grid" id="featureGrid"></div>
+    </section>
+    <section class="panel test-panel">
+        <header>
+            <div>
+                <h2>Diagnostics & testing</h2>
+                <p style="margin:0; color:var(--muted);">Use the serial console command <code>tests</code> to exercise motors, sound, and battery readings.</p>
             </div>
-            <div class="pin-field"><label>Motor A PWM</label><div class="pin-input"><input type="number" id="rightA_pwm" /><button type="button" data-pin-btn="rightA_pwm">Update</button></div></div>
-            <div class="pin-field"><label>Motor A IN1</label><div class="pin-input"><input type="text" id="rightA_in1" /><button type="button" data-pin-btn="rightA_in1">Update</button></div></div>
-            <div class="pin-field"><label>Motor A IN2</label><div class="pin-input"><input type="text" id="rightA_in2" /><button type="button" data-pin-btn="rightA_in2">Update</button></div></div>
-            <div class="pin-field"><label>Motor B PWM</label><div class="pin-input"><input type="number" id="rightB_pwm" /><button type="button" data-pin-btn="rightB_pwm">Update</button></div></div>
-            <div class="pin-field"><label>Motor B IN1</label><div class="pin-input"><input type="text" id="rightB_in1" /><button type="button" data-pin-btn="rightB_in1">Update</button></div></div>
-            <div class="pin-field"><label>Motor B IN2</label><div class="pin-input"><input type="text" id="rightB_in2" /><button type="button" data-pin-btn="rightB_in2">Update</button></div></div>
-            <div class="pin-field"><label>Driver STBY</label><div class="pin-input"><input type="text" id="right_stby" /><button type="button" data-pin-btn="right_stby">Update</button></div></div>
-        </article>
-        <article class="driver-card aux-card">
-            <header>Auxiliary Pins</header>
-            <div class="pin-field"><label>Light Bar</label><div class="pin-input"><input type="text" id="light_pin" /><button type="button" data-pin-btn="light_pin">Update</button></div></div>
-            <div class="pin-field"><label>Speaker</label><div class="pin-input"><input type="text" id="speaker_pin" /><button type="button" data-pin-btn="speaker_pin">Update</button></div></div>
-            <div class="pin-field"><label>Battery Sense</label><div class="pin-input"><input type="text" id="battery_pin" /><button type="button" data-pin-btn="battery_pin">Update</button></div></div>
-            <div class="pin-field"><label>PCF8575 Address</label><div class="pin-input"><input type="number" id="pcfAddress" /><button type="button" data-pin-btn="pcfAddress">Update</button></div></div>
-            <div class="pin-field"><label>Slave TX</label><div class="pin-input"><input type="number" id="slave_tx" /><button type="button" data-pin-btn="slave_tx">Update</button></div></div>
-            <div class="pin-field"><label>Slave RX</label><div class="pin-input"><input type="number" id="slave_rx" /><button type="button" data-pin-btn="slave_rx">Update</button></div></div>
-        </article>
-    </div>
-</section>
-<section class="panel">
-    <h2>PCF8575 Map</h2>
-    <p class="pin-hint">See which function currently consumes each expander bit. Selecting a PCF value above will update this grid automatically.</p>
-    <div class="pcf-grid">
-        <div class="pcf-cell" data-pcf-cell="0"><strong>PCF0</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="1"><strong>PCF1</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="2"><strong>PCF2</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="3"><strong>PCF3</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="4"><strong>PCF4</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="5"><strong>PCF5</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="6"><strong>PCF6</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="7"><strong>PCF7</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="8"><strong>PCF8</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="9"><strong>PCF9</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="10"><strong>PCF10</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="11"><strong>PCF11</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="12"><strong>PCF12</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="13"><strong>PCF13</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="14"><strong>PCF14</strong><span>Unused</span></div>
-        <div class="pcf-cell" data-pcf-cell="15"><strong>PCF15</strong><span>Unused</span></div>
-    </div>
-</section>
+        </header>
+        <ul>
+            <li>Run <strong>Motor sweep</strong> to verify both tracks spin and pivot.</li>
+            <li><strong>Sound pulse</strong> drives the speaker briefly for feedback.</li>
+            <li><strong>Battery read</strong> reports voltage when requested.</li>
+        </ul>
+    </section>
+    <section class="panel">
+        <header>
+            <div>
+                <h2>Pin assignments</h2>
+                <p style="margin:0; color:var(--muted);">Cards show current owners, allowed values, and whether PCA/PCF expanders are supported.</p>
+            </div>
+            <div class="tabs">
+                <button data-board="master" class="active">Master ESP</button>
+                <button data-board="slave">Slave ESP</button>
+            </div>
+        </header>
+        <div class="pin-grid" id="pinGrid"></div>
+    </section>
 </main>
+<div class="toast" id="toast"></div>
 <script>
-let latestStatus=null;
-async function refreshStatus(){
-    try{
-        const res=await fetch('/api/status');
-        if(!res.ok) return;
-        const data=await res.json();
-        latestStatus=data;
-        updateModel(data);
-        updateTelemetry(data);
-        updateOverridesUI(data);
-    }catch(e){console.warn(e);}
-}
-function updateModel(data){
-    const model=document.getElementById('rc-model');
-    model.classList.remove('debug','active','locked','hazard');
-    model.classList.add(data.modeClass||'active');
-    if(data.hazard){ model.classList.add('hazard'); }
-    const stats=document.getElementById('status-text');
-    stats.innerHTML=`Mode: <strong>${data.mode}</strong><br>Wi-Fi: <span class="badge ${data.wifiLink?'ok':'danger'}">${data.wifiLink?'Online':'Offline'}</span> | RC: <span class="badge ${data.rcLink?'ok':'danger'}">${data.rcLink?'Linked':'Lost'}</span>`;
-}
-function updateTelemetry(data){
-    const wrap=document.getElementById('telemetry');
-    wrap.innerHTML=`
-        <div>Steering: <strong>${(data.steering||0).toFixed(2)}</strong></div>
-        <div>Throttle: <strong>${(data.throttle||0).toFixed(2)}</strong></div>
-        <div>Hazard: <strong>${data.hazard?'ON':'off'}</strong></div>
-        <div>Lighting: <strong>${data.lighting?'ON':'off'}</strong></div>
-        <div>Ultrasonic L: <strong>${(data.ultraLeft||1).toFixed(2)}</strong></div>
-        <div>Ultrasonic R: <strong>${(data.ultraRight||1).toFixed(2)}</strong></div>
-        <div>Station IP: <strong>${data.ip||'—'}</strong></div>
-        <div>AP IP: <strong>${data.ap||'—'}</strong></div>
-        <div>Log Entries: <strong>${data.logCount||0}</strong></div>
-        <div>Server Time: <strong>${data.serverTime||0}</strong></div>`;
-}
-function updateOverridesUI(data){
-    document.getElementById('hazardToggle').checked=data.overrideHazard;
-    document.getElementById('lightsToggle').checked=data.overrideLights;
-}
-function pinToString(value){
-    if(value<=-2){return `pcf${(-value-2)}`;}
-    if(value===-1){return 'none';}
-    return `${value}`;
-}
-const pinEditors=[
-    {input:'leftA_pwm', param:'leftMotorA_pwm', allowPcf:false, label:'Left Motor A PWM'},
-    {input:'leftA_in1', param:'leftMotorA_in1', allowPcf:true, label:'Left Motor A IN1'},
-    {input:'leftA_in2', param:'leftMotorA_in2', allowPcf:true, label:'Left Motor A IN2'},
-    {input:'leftB_pwm', param:'leftMotorB_pwm', allowPcf:false, label:'Left Motor B PWM'},
-    {input:'leftB_in1', param:'leftMotorB_in1', allowPcf:true, label:'Left Motor B IN1'},
-    {input:'leftB_in2', param:'leftMotorB_in2', allowPcf:true, label:'Left Motor B IN2'},
-    {input:'left_stby', param:'leftDriver_stby', allowPcf:true, label:'Left Driver STBY'},
-    {input:'rightA_pwm', param:'rightMotorA_pwm', allowPcf:false, label:'Right Motor A PWM'},
-    {input:'rightA_in1', param:'rightMotorA_in1', allowPcf:true, label:'Right Motor A IN1'},
-    {input:'rightA_in2', param:'rightMotorA_in2', allowPcf:true, label:'Right Motor A IN2'},
-    {input:'rightB_pwm', param:'rightMotorB_pwm', allowPcf:false, label:'Right Motor B PWM'},
-    {input:'rightB_in1', param:'rightMotorB_in1', allowPcf:true, label:'Right Motor B IN1'},
-    {input:'rightB_in2', param:'rightMotorB_in2', allowPcf:true, label:'Right Motor B IN2'},
-    {input:'right_stby', param:'rightDriver_stby', allowPcf:true, label:'Right Driver STBY'},
-    {input:'light_pin', param:'light_pin', allowPcf:true, label:'Light Bar'},
-    {input:'speaker_pin', param:'speaker_pin', allowPcf:true, label:'Speaker'},
-    {input:'battery_pin', param:'battery_pin', allowPcf:true, label:'Battery Sense'},
-    {input:'pcfAddress', param:'pcfAddress', allowPcf:false, label:'PCF Address'},
-    {input:'slave_tx', param:'slave_tx', allowPcf:false, label:'Slave TX'},
-    {input:'slave_rx', param:'slave_rx', allowPcf:false, label:'Slave RX'},
+const pinSchema = __PIN_SCHEMA_JSON__;
+const featureFields = [
+    { key: 'lightingEnabled', label: 'Lighting', description: 'Light bar channels and blink patterns.' },
+    { key: 'soundEnabled', label: 'Sound', description: 'Speaker output and FX engine.' },
+    { key: 'sensorsEnabled', label: 'Sensors', description: 'Ultrasonic and tip sensors.' },
+    { key: 'wifiEnabled', label: 'Wi-Fi', description: 'Enable station/AP networking.' },
+    { key: 'ultrasonicEnabled', label: 'Ultrasonic', description: 'Allow ultrasonic range sensors.' },
+    { key: 'tipOverEnabled', label: 'Tip-over', description: 'Enable tip-over protection routines.' },
 ];
+let config = null;
+let activeBoard = 'master';
+const featureGrid = document.getElementById('featureGrid');
+const pinGrid = document.getElementById('pinGrid');
+const toast = document.getElementById('toast');
+const boardButtons = document.querySelectorAll('[data-board]');
+const statusBadge = document.getElementById('statusBadge');
+const refreshIntervalMs = 4000;
 
-function normalizePinInput(value, allowPcf){
-    const trimmed=String(value ?? '').trim();
-    if(!trimmed){return null;}
-    const lower=trimmed.toLowerCase();
-    if(allowPcf){
-        if(lower==='none'||lower==='off'){return 'none';}
-        if(lower.startsWith('pcf')){
-            const idx=parseInt(lower.substring(3),10);
-            if(Number.isNaN(idx) || idx<0 || idx>15){return null;}
-            return `pcf${idx}`;
+function showToast(message, tone = 'info') {
+    toast.textContent = message;
+    toast.style.borderColor = tone === 'danger' ? 'rgba(255,56,100,0.6)' : tone === 'warn' ? 'rgba(255,183,3,0.6)' : 'rgba(59,227,164,0.6)';
+    toast.classList.add('show');
+    clearTimeout(toast.dataset.timeout);
+    toast.dataset.timeout = setTimeout(() => toast.classList.remove('show'), 2800);
+}
+
+function formatPinValue(value) {
+    if (typeof value !== 'number') {
+        return 'unknown';
+    }
+    if (value <= -2) {
+        return 'pcf' + (-value - 2);
+    }
+    if (value === -1) {
+        return 'unassigned';
+    }
+    return String(value);
+}
+
+function getValueFromPath(path) {
+    if (!config) {
+        return undefined;
+    }
+    const parts = path.split('.');
+    let cursor = config;
+    for (const part of parts) {
+        if (cursor == null) {
+            return undefined;
+        }
+        if (/^\d+$/.test(part)) {
+            cursor = cursor[Number(part)];
+        } else {
+            cursor = cursor[part];
         }
     }
-    if(/^-?\d+$/.test(trimmed)){
-        return String(parseInt(trimmed,10));
-    }
-    return null;
+    return cursor;
 }
 
-function pinValueToIndex(raw){
-    if(raw===undefined || raw===null){
-        return -1;
-    }
-    const str=String(raw).trim().toLowerCase();
-    if(!str){
-        return -1;
-    }
-    if(str.startsWith('pcf')){
-        const idx=parseInt(str.substring(3),10);
-        return Number.isNaN(idx) ? -1 : idx;
-    }
-    const num=parseInt(str,10);
-    if(Number.isNaN(num)){
-        return -1;
-    }
-    if(num<=-2){
-        return (-num-2);
-    }
-    return -1;
-}
-
-const pcfSelects=[];
-
-async function updatePinField(cfg, overrideValue=null){
-    const input=document.getElementById(cfg.input);
-    const sourceValue=overrideValue!==null ? overrideValue : input.value;
-    const normalized=normalizePinInput(sourceValue, cfg.allowPcf);
-    if(normalized===null){
-        alert('Enter a valid value (number or pcf#).');
+function renderFeatureToggles() {
+    if (!config) {
+        featureGrid.innerHTML = '';
         return;
     }
-    const params=new URLSearchParams();
-    params.append(cfg.param, normalized);
-    const res=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:params.toString()});
-    if(res.ok){
-        input.value=normalized;
-        input.classList.add('pin-saved');
-        setTimeout(()=>input.classList.remove('pin-saved'),1200);
-        syncPcfSelectors();
-        updatePcfMapFromInputs();
-    }else{
-        alert('Failed to update pin.');
+    featureGrid.innerHTML = '';
+    for (const field of featureFields) {
+        const card = document.createElement('article');
+        card.className = 'feature-card';
+        card.innerHTML = `<strong>${field.label}</strong><small>${field.description}</small><label><span>Enabled</span><input type="checkbox" data-field="${field.key}" /></label>`;
+        const input = card.querySelector('input');
+        input.checked = !!config.features[field.key];
+        input.addEventListener('change', () => {
+            postConfig({ [field.key]: input.checked ? '1' : '0' })
+                .then(refreshConfig)
+                .then(() => showToast(`${field.label} ${input.checked ? 'enabled' : 'disabled'}`))
+                .catch(err => showToast(err.message, 'danger'));
+        });
+        featureGrid.appendChild(card);
     }
 }
 
-function registerPinEditors(){
-    pinEditors.forEach(cfg=>{
-        const btn=document.querySelector(`[data-pin-btn="${cfg.input}"]`);
-        if(btn){
-            btn.addEventListener('click',()=>updatePinField(cfg));
+function validatePinValue(entry, raw) {
+    const trimmed = raw.trim().toLowerCase();
+    if (!trimmed) {
+        return { valid: false, message: 'Type a GPIO number, pcf#, or "none".' };
+    }
+    if (trimmed === 'none' || trimmed === 'off') {
+        return { valid: true, value: 'none' };
+    }
+    if (trimmed.startsWith('pcf')) {
+        if (!entry.allowPcf) {
+            return { valid: false, message: 'This signal must stay on a GPIO pin.' };
         }
-    });
+        const idx = Number(trimmed.substring(3).trim());
+        if (!Number.isInteger(idx) || idx < 0 || idx > 15) {
+            return { valid: false, message: 'Use pcf0..pcf15 for expander channels.' };
+        }
+        return { valid: true, value: `pcf${idx}` };
+    }
+    const number = Number(trimmed);
+    if (!Number.isInteger(number)) {
+        return { valid: false, message: 'Use a whole GPIO number or pcf#.' };
+    }
+    if (entry.minValue >= 0 && number < entry.minValue) {
+        return { valid: false, message: `Value must be ≥ ${entry.minValue}.` };
+    }
+    if (entry.maxValue >= 0 && number > entry.maxValue) {
+        return { valid: false, message: `Value must be ≤ ${entry.maxValue}.` };
+    }
+    return { valid: true, value: String(number) };
 }
 
-function attachPcfSelectors(){
-    pinEditors.forEach(cfg=>{
-        if(!cfg.allowPcf){
-            return;
+function renderPinCards() {
+    if (!config) {
+        pinGrid.innerHTML = '';
+        return;
+    }
+    const entries = pinSchema.filter(entry => entry.board === activeBoard);
+    pinGrid.innerHTML = entries.map((entry, index) => {
+        const currentValue = formatPinValue(getValueFromPath(entry.path));
+        const hints = [];
+        if (!entry.allowPcf) {
+            hints.push('GPIO-only');
         }
-        const input=document.getElementById(cfg.input);
-        if(!input || input.dataset.pcfSelectorAttached){
-            return;
+        if (entry.hint) {
+            hints.push(entry.hint);
         }
-        const select=document.createElement('select');
-        select.className='pcf-select';
-        select.dataset.pinInput=cfg.input;
-        const gpioOpt=document.createElement('option');
-        gpioOpt.value='__gpio__';
-        gpioOpt.textContent='GPIO';
-        select.appendChild(gpioOpt);
-        const noneOpt=document.createElement('option');
-        noneOpt.value='none';
-        noneOpt.textContent='none';
-        select.appendChild(noneOpt);
-        for(let i=0;i<16;++i){
-            const opt=document.createElement('option');
-            opt.value=`pcf${i}`;
-            opt.textContent=`pcf${i}`;
-            select.appendChild(opt);
-        }
-        select.addEventListener('change',()=>{
-            if(select.value==='__gpio__'){
-                input.focus();
+        return `
+            <article class="pin-card" data-index="${index}">
+                <div class="pin-card__head">
+                    <div>
+                        <strong>${entry.label}</strong>
+                        <div class="pin-card__owner">${entry.owner}</div>
+                    </div>
+                    <div class="pin-card__value">${currentValue}</div>
+                </div>
+                <p class="pin-card__desc">${entry.description}</p>
+                <div class="pin-card__input">
+                    <input type="text" placeholder="GPIO, pcf#, or none" data-token="${entry.token}" />
+                    <button type="button">Set</button>
+                </div>
+                <small class="pin-card__hint">${entry.type}${hints.length ? ' • ' + hints.join(' • ') : ''}</small>
+                <div class="pin-card__message" aria-live="polite"></div>
+            </article>
+        `;
+    }).join('');
+    pinGrid.querySelectorAll('.pin-card').forEach(card => {
+        const input = card.querySelector('input');
+        const button = card.querySelector('button');
+        const message = card.querySelector('.pin-card__message');
+        const entry = entries[Number(card.dataset.index)];
+        button.addEventListener('click', () => {
+            const result = validatePinValue(entry, input.value);
+            if (!result.valid) {
+                message.textContent = result.message;
+                message.className = 'pin-card__message error';
                 return;
             }
-            updatePinField(cfg, select.value);
+            message.textContent = 'Saving…';
+            message.className = 'pin-card__message';
+            const payload = { [entry.token]: result.value };
+            postConfig(payload)
+                .then(() => refreshConfig())
+                .then(() => {
+                    message.textContent = 'Updated';
+                    message.className = 'pin-card__message success';
+                    input.value = '';
+                })
+                .catch(err => {
+                    message.textContent = err.message;
+                    message.className = 'pin-card__message error';
+                });
         });
-        input.parentElement.appendChild(select);
-        input.dataset.pcfSelectorAttached='1';
-        pcfSelects.push(select);
-    });
-    syncPcfSelectors();
-}
-
-function syncPcfSelectors(){
-    pcfSelects.forEach(select=>{
-        const input=document.getElementById(select.dataset.pinInput);
-        if(!input){
-            return;
-        }
-        const val=String(input.value||'').trim().toLowerCase();
-        if(!val){
-            select.value='__gpio__';
-        }else if(val.startsWith('pcf')){
-            select.value=val;
-        }else if(val==='none' || val==='off' || val==='-1'){
-            select.value='none';
-        }else{
-            select.value='__gpio__';
-        }
     });
 }
 
-function updatePcfMapFromInputs(){
-    const assignments=new Array(16).fill('Unused');
-    pinEditors.forEach(cfg=>{
-        if(!cfg.allowPcf){
-            return;
-        }
-        const input=document.getElementById(cfg.input);
-        if(!input){
-            return;
-        }
-        const idx=pinValueToIndex(input.value);
-        if(idx>=0 && idx<assignments.length){
-            assignments[idx]=cfg.label;
-        }
+async function fetchJson(path) {
+    const resp = await fetch(path);
+    if (!resp.ok) {
+        throw new Error(`Request failed (${resp.status})`);
+    }
+    return resp.json();
+}
+
+async function refreshConfig() {
+    config = await fetchJson('/api/config');
+    renderFeatureToggles();
+    renderPinCards();
+}
+
+async function refreshStatus() {
+    const state = await fetchJson('/api/status');
+    const labels = [];
+    labels.push(`RC ${state.rcLink ? 'online' : 'offline'}`);
+    labels.push(`Wi-Fi ${state.wifiLink ? 'online' : 'offline'}`);
+    labels.push(state.mode);
+    statusBadge.textContent = labels.join(' • ');
+}
+
+async function postConfig(payload) {
+    const data = new URLSearchParams();
+    Object.entries(payload).forEach(([key, value]) => data.append(key, value));
+    const resp = await fetch('/api/config', {
+        method: 'POST',
+        body: data,
     });
-    document.querySelectorAll('[data-pcf-cell]').forEach(cell=>{
-        const idx=parseInt(cell.dataset.pcfCell,10);
-        const label=assignments[idx];
-        cell.classList.toggle('assigned', label!=='Unused');
-        const span=cell.querySelector('span');
-        if(span){
-            span.textContent=label;
-        }
+    if (!resp.ok) {
+        throw new Error('Failed to save settings');
+    }
+}
+
+function setActiveBoard(board) {
+    activeBoard = board;
+    boardButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.board === board));
+    renderPinCards();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    boardButtons.forEach(button => {
+        button.addEventListener('click', () => setActiveBoard(button.dataset.board));
     });
-}
-async function loadConfig(){
-    try{
-        const res=await fetch('/api/config');
-        if(!res.ok) return;
-        const cfg=await res.json();
-        document.getElementById('ssid').value=cfg.wifi.ssid||'';
-        document.getElementById('password').value='';
-        document.getElementById('apSsid').value=cfg.wifi.apSsid||'';
-        document.getElementById('apPassword').value='';
-        document.getElementById('pcaAddress').value=cfg.lighting.pcaAddress;
-        document.getElementById('pwmFrequency').value=cfg.lighting.pwmFrequency;
-        document.getElementById('lightingEnabled').checked=cfg.features.lighting;
-        document.getElementById('soundEnabled').checked=cfg.features.sound;
-        document.getElementById('wifiEnabled').checked=cfg.features.wifi;
-        document.getElementById('ultrasonicEnabled').checked=cfg.features.ultrasonic;
-        document.getElementById('tipEnabled').checked=cfg.features.tip;
-        document.getElementById('blinkWifi').checked=cfg.blink.wifi;
-        document.getElementById('blinkRc').checked=cfg.blink.rc;
-        document.getElementById('blinkPeriod').value=cfg.blink.period;
-        const pins=cfg.pins;
-        document.getElementById('leftA_pwm').value=pins.leftDriver.motorA.pwm;
-        document.getElementById('leftA_in1').value=pinToString(pins.leftDriver.motorA.in1);
-        document.getElementById('leftA_in2').value=pinToString(pins.leftDriver.motorA.in2);
-        document.getElementById('leftB_pwm').value=pins.leftDriver.motorB.pwm;
-        document.getElementById('leftB_in1').value=pinToString(pins.leftDriver.motorB.in1);
-        document.getElementById('leftB_in2').value=pinToString(pins.leftDriver.motorB.in2);
-        document.getElementById('left_stby').value=pinToString(pins.leftDriver.standby);
-        document.getElementById('rightA_pwm').value=pins.rightDriver.motorA.pwm;
-        document.getElementById('rightA_in1').value=pinToString(pins.rightDriver.motorA.in1);
-        document.getElementById('rightA_in2').value=pinToString(pins.rightDriver.motorA.in2);
-        document.getElementById('rightB_pwm').value=pins.rightDriver.motorB.pwm;
-        document.getElementById('rightB_in1').value=pinToString(pins.rightDriver.motorB.in1);
-        document.getElementById('rightB_in2').value=pinToString(pins.rightDriver.motorB.in2);
-        document.getElementById('right_stby').value=pinToString(pins.rightDriver.standby);
-        document.getElementById('light_pin').value=pinToString(pins.lightBar);
-        document.getElementById('speaker_pin').value=pinToString(pins.speaker);
-        document.getElementById('battery_pin').value=pinToString(pins.batterySense);
-        document.getElementById('pcfAddress').value=pins.pcfAddress;
-        document.getElementById('slave_tx').value=pins.slaveTx;
-        document.getElementById('slave_rx').value=pins.slaveRx;
-        syncPcfSelectors();
-        updatePcfMapFromInputs();
-    }catch(e){console.warn(e);}
-}
-async function submitConfig(evt){
-    evt.preventDefault();
-    const params=new URLSearchParams();
-    params.append('ssid',document.getElementById('ssid').value);
-    params.append('password',document.getElementById('password').value);
-    params.append('apSsid',document.getElementById('apSsid').value);
-    params.append('apPassword',document.getElementById('apPassword').value);
-    params.append('pcaAddress',document.getElementById('pcaAddress').value);
-    params.append('pwmFrequency',document.getElementById('pwmFrequency').value);
-    params.append('lightingEnabled',document.getElementById('lightingEnabled').checked?'1':'0');
-    params.append('soundEnabled',document.getElementById('soundEnabled').checked?'1':'0');
-    params.append('wifiEnabled',document.getElementById('wifiEnabled').checked?'1':'0');
-    params.append('ultrasonicEnabled',document.getElementById('ultrasonicEnabled').checked?'1':'0');
-    params.append('tipEnabled',document.getElementById('tipEnabled').checked?'1':'0');
-    params.append('blinkWifi',document.getElementById('blinkWifi').checked?'1':'0');
-    params.append('blinkRc',document.getElementById('blinkRc').checked?'1':'0');
-    params.append('blinkPeriod',document.getElementById('blinkPeriod').value);
-    params.append('leftMotorA_pwm',document.getElementById('leftA_pwm').value);
-    params.append('leftMotorA_in1',document.getElementById('leftA_in1').value);
-    params.append('leftMotorA_in2',document.getElementById('leftA_in2').value);
-    params.append('leftMotorB_pwm',document.getElementById('leftB_pwm').value);
-    params.append('leftMotorB_in1',document.getElementById('leftB_in1').value);
-    params.append('leftMotorB_in2',document.getElementById('leftB_in2').value);
-    params.append('leftDriver_stby',document.getElementById('left_stby').value);
-    params.append('rightMotorA_pwm',document.getElementById('rightA_pwm').value);
-    params.append('rightMotorA_in1',document.getElementById('rightA_in1').value);
-    params.append('rightMotorA_in2',document.getElementById('rightA_in2').value);
-    params.append('rightMotorB_pwm',document.getElementById('rightB_pwm').value);
-    params.append('rightMotorB_in1',document.getElementById('rightB_in1').value);
-    params.append('rightMotorB_in2',document.getElementById('rightB_in2').value);
-    params.append('rightDriver_stby',document.getElementById('right_stby').value);
-    params.append('light_pin',document.getElementById('light_pin').value);
-    params.append('speaker_pin',document.getElementById('speaker_pin').value);
-    params.append('battery_pin',document.getElementById('battery_pin').value);
-    params.append('pcfAddress',document.getElementById('pcfAddress').value);
-    params.append('slave_tx',document.getElementById('slave_tx').value);
-    params.append('slave_rx',document.getElementById('slave_rx').value);
-    const res=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:params.toString()});
-    if(res.ok){ alert('Settings updated. Device may reboot/reconnect.'); }
-}
-async function sendOverride(){
-    const params=new URLSearchParams();
-    params.append('hazardOverride',document.getElementById('hazardToggle').checked?'1':'0');
-    params.append('hazard',document.getElementById('hazardToggle').checked?'1':'0');
-    params.append('lightsOverride',document.getElementById('lightsToggle').checked?'1':'0');
-    params.append('lights',document.getElementById('lightsToggle').checked?'1':'0');
-    await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:params.toString()});
-}
-async function clearOverrides(){
-    await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'clear=1'});
-    document.getElementById('hazardToggle').checked=false;
-    document.getElementById('lightsToggle').checked=false;
-}
-async function importConfigFile(evt){
-    const fileInput=document.getElementById('configFile');
-    if(!fileInput.files.length){ alert('Select a JSON file to import.'); return; }
-    const file=fileInput.files[0];
-    const text=await file.text();
-    const res=await fetch('/api/config/import',{method:'POST',headers:{'Content-Type':'application/json'},body:text});
-    if(res.ok){ alert('Config imported. Device will apply the new settings.'); }
-    else { alert('Import failed.'); }
-}
-document.addEventListener('DOMContentLoaded',()=>{
-    registerPinEditors();
-    attachPcfSelectors();
-    loadConfig();
-    refreshStatus();
-    setInterval(refreshStatus,1000);
-    document.getElementById('configForm').addEventListener('submit',submitConfig);
-    document.getElementById('hazardToggle').addEventListener('change',sendOverride);
-    document.getElementById('lightsToggle').addEventListener('change',sendOverride);
-    document.getElementById('clearOverrides').addEventListener('click',clearOverrides);
-    document.getElementById('importConfig').addEventListener('click',importConfigFile);
+    Promise.all([refreshConfig(), refreshStatus()])
+        .catch(err => showToast(err.message, 'danger'));
+    setInterval(() => {
+        refreshConfig().catch(err => showToast(err.message, 'danger'));
+        refreshStatus().catch(() => {});
+    }, refreshIntervalMs);
 });
 </script>
-</body>
-</html>)HTML";
+ </body>
+ </html>
+)HTML";
 
 String modeToString(Comms::RcStatusMode mode) {
     switch (mode) {
@@ -1091,7 +906,9 @@ void ControlServer::notifyConfigApplied() {
 }
 
 void ControlServer::handleRoot() {
-    server_.send_P(200, "text/html", CONTROL_PAGE);
+    String page = CONTROL_PAGE_TEMPLATE;
+    page.replace("__PIN_SCHEMA_JSON__", buildPinSchemaJson());
+    server_.send(200, "text/html", page);
 }
 
 void ControlServer::handleStatus() {
@@ -1473,6 +1290,31 @@ void ControlServer::handleConfigImport() {
 }
 void ControlServer::handleConfigPost() {
     bool changed = false;
+    auto assignPinArg = [&](const char* name, int& target, bool allowPcf) {
+        if (!server_.hasArg(name)) {
+            return;
+        }
+        String raw = server_.arg(name);
+        raw.trim();
+        if (raw.isEmpty()) {
+            return;
+        }
+        int parsed = target;
+        bool ok = allowPcf ? parsePinString(raw, parsed) : parseIntStrict(raw, parsed);
+        if (!ok) {
+            return;
+        }
+        target = parsed;
+        changed = true;
+    };
+    auto copyString = [](char* dest, size_t len, const String& src) {
+        if (len == 0) {
+            return;
+        }
+        size_t copyLen = std::min(len - 1, static_cast<size_t>(src.length()));
+        memcpy(dest, src.c_str(), copyLen);
+        dest[copyLen] = '\0';
+    };
     if (server_.hasArg("lightingEnabled")) {
         const bool val = server_.arg("lightingEnabled") == "1";
         if (config_->features.lightsEnabled != val) {
@@ -1544,15 +1386,6 @@ void ControlServer::handleConfigPost() {
         }
     }
 
-    auto copyString = [](char* dest, size_t len, const String& src) {
-        if (len == 0) {
-            return;
-        }
-        size_t copyLen = std::min(len - 1, static_cast<size_t>(src.length()));
-        memcpy(dest, src.c_str(), copyLen);
-        dest[copyLen] = '\0';
-    };
-
     if (server_.hasArg("ssid")) {
         const String ssid = server_.arg("ssid");
         if (ssid.length() < sizeof(config_->wifi.ssid)) {
@@ -1602,6 +1435,11 @@ void ControlServer::handleConfigPost() {
     assignPinArg("pcfAddress", config_->pins.pcfAddress, false);
     assignPinArg("slave_tx", config_->pins.slaveTx, false);
     assignPinArg("slave_rx", config_->pins.slaveRx, false);
+    for (size_t i = 0; i < std::size(config_->rc.channelPins); ++i) {
+        String arg = "rc";
+        arg += (i + 1);
+        assignPinArg(arg.c_str(), config_->rc.channelPins[i], false);
+    }
 
     if (changed) {
         if (store_) {
@@ -1741,6 +1579,33 @@ String ControlServer::buildConfigJson(bool includeSensitive) const {
     json += "}";
 
     json += "}";
+    return json;
+}
+
+String ControlServer::buildPinSchemaJson() const {
+    String json = "[";
+    for (std::size_t i = 0; i < Config::kPinSchemaCount; ++i) {
+        const auto& entry = Config::kPinSchema[i];
+        json += "{";
+        json += "\"board\":\"" + escapeJson(String(entry.board)) + "\",";
+        json += "\"path\":\"" + escapeJson(String(entry.path)) + "\",";
+        json += "\"token\":\"" + escapeJson(String(entry.token)) + "\",";
+        json += "\"label\":\"" + escapeJson(String(entry.label)) + "\",";
+        json += "\"owner\":\"" + escapeJson(String(entry.owner)) + "\",";
+        json += "\"description\":\"" + escapeJson(String(entry.description)) + "\",";
+        json += "\"type\":\"" + escapeJson(String(entry.type)) + "\",";
+        json += "\"hint\":\"" + escapeJson(String(entry.hint)) + "\",";
+        json += "\"allowPcf\":" + String(entry.allowPcf ? 1 : 0) + ",";
+        json += "\"gpioOnly\":" + String(entry.gpioOnly ? 1 : 0) + ",";
+        json += "\"defaultPin\":" + String(entry.defaultPin) + ",";
+        json += "\"minValue\":" + String(entry.minValue) + ",";
+        json += "\"maxValue\":" + String(entry.maxValue);
+        json += "}";
+        if (i + 1 < Config::kPinSchemaCount) {
+            json += ",";
+        }
+    }
+    json += "]";
     return json;
 }
 

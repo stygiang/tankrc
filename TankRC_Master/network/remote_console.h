@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../config/build_config.h"
+
 #if TANKRC_ENABLE_NETWORK
 
 #include <Print.h>
