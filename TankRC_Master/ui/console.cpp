@@ -4,6 +4,7 @@
 #include <cstdarg>
 #include <cctype>
 #include <iterator>
+#include <map>
 #include <vector>
 
 #include "comms/radio_link.h"
@@ -1021,6 +1022,37 @@ void renderPcfExpanderSummary(const Config::RuntimeConfig& config, const std::ve
     }
 }
 
+void renderPinOwnershipSummary(const std::vector<PinWizardBinding>& bindings) {
+    console.println();
+    console.println(F(" Pin ownership map"));
+    std::map<int, std::vector<const PinWizardBinding*>> owners;
+    for (const auto& binding : bindings) {
+        const int value = readBindingValue(binding);
+        if (value == -1) {
+            continue;
+        }
+        owners[value].push_back(&binding);
+    }
+    if (owners.empty()) {
+        console.println(F("  (no pin assignments)"));
+        return;
+    }
+    for (const auto& entry : owners) {
+        const int pin = entry.first;
+        const auto& list = entry.second;
+        console.printf("  %-8s : ", formatPinValue(pin).c_str());
+        bool first = true;
+        for (const auto* binding : list) {
+            if (!first) {
+                console.print(F(", "));
+            }
+            console.printf("%s [%s]", binding->label.c_str(), binding->token.c_str());
+            first = false;
+        }
+        console.println();
+    }
+}
+
 bool isDriverTokenName(const String& token) {
     static const char* const tokens[] = {
         "lma_pwm", "lma_in1", "lma_in2", "lmb_pwm", "lmb_in1", "lmb_in2", "left_stby",
@@ -1106,6 +1138,7 @@ void renderPinWizardDashboard(const Config::RuntimeConfig& config, const std::ve
 
     renderIoPortExpanderSummary(config);
     renderPcfExpanderSummary(config, bindings);
+    renderPinOwnershipSummary(bindings);
 
     const std::size_t pending = countPendingPinChanges(bindings);
     console.println();
