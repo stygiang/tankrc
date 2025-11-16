@@ -58,11 +58,8 @@ void setup() {
     Core::setupHardware();
 
     Hal::begin(runtimeConfig);
-<<<<<<< HEAD
     Health::setStatus(Health::HealthCode::Ok, "Slave startup");
-=======
 #if FEATURE_EVENT_LOG
->>>>>>> 2bb7000 (event logger toggle)
     Events::subscribe(logEvent);
 #endif
     slaveEndpoint.begin(&runtimeConfig, &driveController);
