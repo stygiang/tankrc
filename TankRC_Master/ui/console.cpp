@@ -612,6 +612,13 @@ void editPcfAddress(Config::PinAssignments& pins) {
     pins.pcfAddress = promptInt("PCF8575 I2C address (decimal)", pins.pcfAddress);
 }
 
+void editPcaAddress(Config::LightingConfig& lighting) {
+    int addr = promptInt("PCA9685 I2C address (decimal, 64 = 0x40)", lighting.pcaAddress);
+    if (addr >= 0 && addr <= 127) {
+        lighting.pcaAddress = static_cast<std::uint8_t>(addr);
+    }
+}
+
 void showPinSummary(const Config::RuntimeConfig& config) {
     const auto& pins = config.pins;
     console.println(F("--- Pin Summary ---"));
@@ -887,10 +894,11 @@ void runPinWizard() {
         console.println(F("4) Edit slave link TX/RX"));
         console.println(F("5) Edit RC receiver pins"));
         console.println(F("6) Edit lighting config"));
-        console.println(F("7) Edit PCF8575 address"));
-        console.println(F("8) Finish wizard"));
+        console.println(F("7) Edit PCA9685 address"));
+        console.println(F("8) Edit PCF8575 address"));
+        console.println(F("9) Finish wizard"));
         console.println(F("0) Exit without finish"));
-        const int choice = promptInt("Select option", 8);
+        const int choice = promptInt("Select option", 9);
         if (wizardAbortRequested_) {
             break;
         }
@@ -914,12 +922,15 @@ void runPinWizard() {
                 configureLighting(temp.lighting);
                 break;
             case 7:
-                editPcfAddress(temp.pins);
+                editPcaAddress(temp.lighting);
                 break;
             case 8:
-                exitRequested = true;
+                editPcfAddress(temp.pins);
                 break;
             case 0:
+                exitRequested = true;
+                break;
+            case 9:
                 exitRequested = true;
                 break;
             default:
