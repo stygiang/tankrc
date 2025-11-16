@@ -410,6 +410,26 @@ form input, form select {
 .badge.warn { background:rgba(255,183,3,0.18); color:var(--warn); }
 .badge.danger { background:rgba(255,56,100,0.18); color:var(--danger); }
 .controls-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1rem; }
+.pin-hint { opacity:0.75; font-size:0.85rem; margin-bottom:0.8rem; }
+.driver-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1rem; }
+.driver-card { background:rgba(5,8,15,0.6); border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:1rem; box-shadow:0 6px 18px rgba(0,0,0,0.35); }
+.driver-card header { font-size:1.1rem; font-weight:600; margin-bottom:0.6rem; }
+.driver-visual { display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.8rem; opacity:0.7; }
+.driver-visual span { display:block; font-size:0.78rem; }
+.pin-field { margin-bottom:0.6rem; }
+.pin-field label { display:block; font-size:0.85rem; margin-bottom:0.2rem; }
+.pin-input { display:flex; gap:0.4rem; }
+.pin-input input { flex:1; }
+.pin-input button { padding:0.45rem 0.9rem; border-radius:8px; border:none; background:var(--accent); color:#02060e; font-weight:600; cursor:pointer; }
+.pin-input button:hover { filter:brightness(1.05); }
+.pin-input input.pin-saved { box-shadow:0 0 0 2px rgba(30,202,211,0.6); }
+.aux-card { display:flex; flex-direction:column; }
+.pcf-select { min-width:90px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); background:rgba(5,8,15,0.8); color:var(--text); padding:0.4rem; }
+.pcf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:0.6rem; }
+.pcf-cell { padding:0.6rem; border-radius:10px; border:1px solid rgba(255,255,255,0.08); background:rgba(5,8,15,0.6); text-align:center; box-shadow:0 4px 12px rgba(0,0,0,0.25); }
+.pcf-cell.assigned { border-color:var(--accent); box-shadow:0 6px 16px rgba(30,202,211,0.3); }
+.pcf-cell strong { display:block; font-size:0.9rem; }
+.pcf-cell span { display:block; margin-top:0.3rem; font-size:0.78rem; opacity:0.8; }
 </style>
 </head>
 <body>
@@ -491,6 +511,71 @@ form input, form select {
         <button type="submit" class="cta" style="margin-top:1rem; width:100%;">Save & Apply</button>
     </form>
 </section>
+<section class="panel">
+    <h2>Motor Driver Pins</h2>
+    <p class="pin-hint">Use GPIO numbers for native pins or type <code>pcf#</code> (e.g. <code>pcf3</code>) for expander lines. Click Update next to any field to push that pin immediately, or use Save & Apply for bulk edits.</p>
+    <div class="driver-grid">
+        <article class="driver-card">
+            <header>Left Driver</header>
+            <div class="driver-visual">
+                <div><strong>Motor A</strong><span>PWM → IN1 → IN2</span></div>
+                <div><strong>Motor B</strong><span>PWM → IN1 → IN2</span></div>
+            </div>
+            <div class="pin-field"><label>Motor A PWM</label><div class="pin-input"><input type="number" id="leftA_pwm" /><button type="button" data-pin-btn="leftA_pwm">Update</button></div></div>
+            <div class="pin-field"><label>Motor A IN1</label><div class="pin-input"><input type="text" id="leftA_in1" placeholder="pcf3" /><button type="button" data-pin-btn="leftA_in1">Update</button></div></div>
+            <div class="pin-field"><label>Motor A IN2</label><div class="pin-input"><input type="text" id="leftA_in2" placeholder="pcf4" /><button type="button" data-pin-btn="leftA_in2">Update</button></div></div>
+            <div class="pin-field"><label>Motor B PWM</label><div class="pin-input"><input type="number" id="leftB_pwm" /><button type="button" data-pin-btn="leftB_pwm">Update</button></div></div>
+            <div class="pin-field"><label>Motor B IN1</label><div class="pin-input"><input type="text" id="leftB_in1" /><button type="button" data-pin-btn="leftB_in1">Update</button></div></div>
+            <div class="pin-field"><label>Motor B IN2</label><div class="pin-input"><input type="text" id="leftB_in2" /><button type="button" data-pin-btn="leftB_in2">Update</button></div></div>
+            <div class="pin-field"><label>Driver STBY</label><div class="pin-input"><input type="text" id="left_stby" /><button type="button" data-pin-btn="left_stby">Update</button></div></div>
+        </article>
+        <article class="driver-card">
+            <header>Right Driver</header>
+            <div class="driver-visual">
+                <div><strong>Motor A</strong><span>PWM → IN1 → IN2</span></div>
+                <div><strong>Motor B</strong><span>PWM → IN1 → IN2</span></div>
+            </div>
+            <div class="pin-field"><label>Motor A PWM</label><div class="pin-input"><input type="number" id="rightA_pwm" /><button type="button" data-pin-btn="rightA_pwm">Update</button></div></div>
+            <div class="pin-field"><label>Motor A IN1</label><div class="pin-input"><input type="text" id="rightA_in1" /><button type="button" data-pin-btn="rightA_in1">Update</button></div></div>
+            <div class="pin-field"><label>Motor A IN2</label><div class="pin-input"><input type="text" id="rightA_in2" /><button type="button" data-pin-btn="rightA_in2">Update</button></div></div>
+            <div class="pin-field"><label>Motor B PWM</label><div class="pin-input"><input type="number" id="rightB_pwm" /><button type="button" data-pin-btn="rightB_pwm">Update</button></div></div>
+            <div class="pin-field"><label>Motor B IN1</label><div class="pin-input"><input type="text" id="rightB_in1" /><button type="button" data-pin-btn="rightB_in1">Update</button></div></div>
+            <div class="pin-field"><label>Motor B IN2</label><div class="pin-input"><input type="text" id="rightB_in2" /><button type="button" data-pin-btn="rightB_in2">Update</button></div></div>
+            <div class="pin-field"><label>Driver STBY</label><div class="pin-input"><input type="text" id="right_stby" /><button type="button" data-pin-btn="right_stby">Update</button></div></div>
+        </article>
+        <article class="driver-card aux-card">
+            <header>Auxiliary Pins</header>
+            <div class="pin-field"><label>Light Bar</label><div class="pin-input"><input type="text" id="light_pin" /><button type="button" data-pin-btn="light_pin">Update</button></div></div>
+            <div class="pin-field"><label>Speaker</label><div class="pin-input"><input type="text" id="speaker_pin" /><button type="button" data-pin-btn="speaker_pin">Update</button></div></div>
+            <div class="pin-field"><label>Battery Sense</label><div class="pin-input"><input type="text" id="battery_pin" /><button type="button" data-pin-btn="battery_pin">Update</button></div></div>
+            <div class="pin-field"><label>PCF8575 Address</label><div class="pin-input"><input type="number" id="pcfAddress" /><button type="button" data-pin-btn="pcfAddress">Update</button></div></div>
+            <div class="pin-field"><label>Slave TX</label><div class="pin-input"><input type="number" id="slave_tx" /><button type="button" data-pin-btn="slave_tx">Update</button></div></div>
+            <div class="pin-field"><label>Slave RX</label><div class="pin-input"><input type="number" id="slave_rx" /><button type="button" data-pin-btn="slave_rx">Update</button></div></div>
+        </article>
+    </div>
+</section>
+<section class="panel">
+    <h2>PCF8575 Map</h2>
+    <p class="pin-hint">See which function currently consumes each expander bit. Selecting a PCF value above will update this grid automatically.</p>
+    <div class="pcf-grid">
+        <div class="pcf-cell" data-pcf-cell="0"><strong>PCF0</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="1"><strong>PCF1</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="2"><strong>PCF2</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="3"><strong>PCF3</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="4"><strong>PCF4</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="5"><strong>PCF5</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="6"><strong>PCF6</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="7"><strong>PCF7</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="8"><strong>PCF8</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="9"><strong>PCF9</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="10"><strong>PCF10</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="11"><strong>PCF11</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="12"><strong>PCF12</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="13"><strong>PCF13</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="14"><strong>PCF14</strong><span>Unused</span></div>
+        <div class="pcf-cell" data-pcf-cell="15"><strong>PCF15</strong><span>Unused</span></div>
+    </div>
+</section>
 </main>
 <script>
 let latestStatus=null;
@@ -531,6 +616,191 @@ function updateOverridesUI(data){
     document.getElementById('hazardToggle').checked=data.overrideHazard;
     document.getElementById('lightsToggle').checked=data.overrideLights;
 }
+function pinToString(value){
+    if(value<=-2){return `pcf${(-value-2)}`;}
+    if(value===-1){return 'none';}
+    return `${value}`;
+}
+const pinEditors=[
+    {input:'leftA_pwm', param:'leftMotorA_pwm', allowPcf:false, label:'Left Motor A PWM'},
+    {input:'leftA_in1', param:'leftMotorA_in1', allowPcf:true, label:'Left Motor A IN1'},
+    {input:'leftA_in2', param:'leftMotorA_in2', allowPcf:true, label:'Left Motor A IN2'},
+    {input:'leftB_pwm', param:'leftMotorB_pwm', allowPcf:false, label:'Left Motor B PWM'},
+    {input:'leftB_in1', param:'leftMotorB_in1', allowPcf:true, label:'Left Motor B IN1'},
+    {input:'leftB_in2', param:'leftMotorB_in2', allowPcf:true, label:'Left Motor B IN2'},
+    {input:'left_stby', param:'leftDriver_stby', allowPcf:true, label:'Left Driver STBY'},
+    {input:'rightA_pwm', param:'rightMotorA_pwm', allowPcf:false, label:'Right Motor A PWM'},
+    {input:'rightA_in1', param:'rightMotorA_in1', allowPcf:true, label:'Right Motor A IN1'},
+    {input:'rightA_in2', param:'rightMotorA_in2', allowPcf:true, label:'Right Motor A IN2'},
+    {input:'rightB_pwm', param:'rightMotorB_pwm', allowPcf:false, label:'Right Motor B PWM'},
+    {input:'rightB_in1', param:'rightMotorB_in1', allowPcf:true, label:'Right Motor B IN1'},
+    {input:'rightB_in2', param:'rightMotorB_in2', allowPcf:true, label:'Right Motor B IN2'},
+    {input:'right_stby', param:'rightDriver_stby', allowPcf:true, label:'Right Driver STBY'},
+    {input:'light_pin', param:'light_pin', allowPcf:true, label:'Light Bar'},
+    {input:'speaker_pin', param:'speaker_pin', allowPcf:true, label:'Speaker'},
+    {input:'battery_pin', param:'battery_pin', allowPcf:true, label:'Battery Sense'},
+    {input:'pcfAddress', param:'pcfAddress', allowPcf:false, label:'PCF Address'},
+    {input:'slave_tx', param:'slave_tx', allowPcf:false, label:'Slave TX'},
+    {input:'slave_rx', param:'slave_rx', allowPcf:false, label:'Slave RX'},
+];
+
+function normalizePinInput(value, allowPcf){
+    const trimmed=String(value ?? '').trim();
+    if(!trimmed){return null;}
+    const lower=trimmed.toLowerCase();
+    if(allowPcf){
+        if(lower==='none'||lower==='off'){return 'none';}
+        if(lower.startsWith('pcf')){
+            const idx=parseInt(lower.substring(3),10);
+            if(Number.isNaN(idx) || idx<0 || idx>15){return null;}
+            return `pcf${idx}`;
+        }
+    }
+    if(/^-?\d+$/.test(trimmed)){
+        return String(parseInt(trimmed,10));
+    }
+    return null;
+}
+
+function pinValueToIndex(raw){
+    if(raw===undefined || raw===null){
+        return -1;
+    }
+    const str=String(raw).trim().toLowerCase();
+    if(!str){
+        return -1;
+    }
+    if(str.startsWith('pcf')){
+        const idx=parseInt(str.substring(3),10);
+        return Number.isNaN(idx) ? -1 : idx;
+    }
+    const num=parseInt(str,10);
+    if(Number.isNaN(num)){
+        return -1;
+    }
+    if(num<=-2){
+        return (-num-2);
+    }
+    return -1;
+}
+
+const pcfSelects=[];
+
+async function updatePinField(cfg, overrideValue=null){
+    const input=document.getElementById(cfg.input);
+    const sourceValue=overrideValue!==null ? overrideValue : input.value;
+    const normalized=normalizePinInput(sourceValue, cfg.allowPcf);
+    if(normalized===null){
+        alert('Enter a valid value (number or pcf#).');
+        return;
+    }
+    const params=new URLSearchParams();
+    params.append(cfg.param, normalized);
+    const res=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:params.toString()});
+    if(res.ok){
+        input.value=normalized;
+        input.classList.add('pin-saved');
+        setTimeout(()=>input.classList.remove('pin-saved'),1200);
+        syncPcfSelectors();
+        updatePcfMapFromInputs();
+    }else{
+        alert('Failed to update pin.');
+    }
+}
+
+function registerPinEditors(){
+    pinEditors.forEach(cfg=>{
+        const btn=document.querySelector(`[data-pin-btn="${cfg.input}"]`);
+        if(btn){
+            btn.addEventListener('click',()=>updatePinField(cfg));
+        }
+    });
+}
+
+function attachPcfSelectors(){
+    pinEditors.forEach(cfg=>{
+        if(!cfg.allowPcf){
+            return;
+        }
+        const input=document.getElementById(cfg.input);
+        if(!input || input.dataset.pcfSelectorAttached){
+            return;
+        }
+        const select=document.createElement('select');
+        select.className='pcf-select';
+        select.dataset.pinInput=cfg.input;
+        const gpioOpt=document.createElement('option');
+        gpioOpt.value='__gpio__';
+        gpioOpt.textContent='GPIO';
+        select.appendChild(gpioOpt);
+        const noneOpt=document.createElement('option');
+        noneOpt.value='none';
+        noneOpt.textContent='none';
+        select.appendChild(noneOpt);
+        for(let i=0;i<16;++i){
+            const opt=document.createElement('option');
+            opt.value=`pcf${i}`;
+            opt.textContent=`pcf${i}`;
+            select.appendChild(opt);
+        }
+        select.addEventListener('change',()=>{
+            if(select.value==='__gpio__'){
+                input.focus();
+                return;
+            }
+            updatePinField(cfg, select.value);
+        });
+        input.parentElement.appendChild(select);
+        input.dataset.pcfSelectorAttached='1';
+        pcfSelects.push(select);
+    });
+    syncPcfSelectors();
+}
+
+function syncPcfSelectors(){
+    pcfSelects.forEach(select=>{
+        const input=document.getElementById(select.dataset.pinInput);
+        if(!input){
+            return;
+        }
+        const val=String(input.value||'').trim().toLowerCase();
+        if(!val){
+            select.value='__gpio__';
+        }else if(val.startsWith('pcf')){
+            select.value=val;
+        }else if(val==='none' || val==='off' || val==='-1'){
+            select.value='none';
+        }else{
+            select.value='__gpio__';
+        }
+    });
+}
+
+function updatePcfMapFromInputs(){
+    const assignments=new Array(16).fill('Unused');
+    pinEditors.forEach(cfg=>{
+        if(!cfg.allowPcf){
+            return;
+        }
+        const input=document.getElementById(cfg.input);
+        if(!input){
+            return;
+        }
+        const idx=pinValueToIndex(input.value);
+        if(idx>=0 && idx<assignments.length){
+            assignments[idx]=cfg.label;
+        }
+    });
+    document.querySelectorAll('[data-pcf-cell]').forEach(cell=>{
+        const idx=parseInt(cell.dataset.pcfCell,10);
+        const label=assignments[idx];
+        cell.classList.toggle('assigned', label!=='Unused');
+        const span=cell.querySelector('span');
+        if(span){
+            span.textContent=label;
+        }
+    });
+}
 async function loadConfig(){
     try{
         const res=await fetch('/api/config');
@@ -550,6 +820,29 @@ async function loadConfig(){
         document.getElementById('blinkWifi').checked=cfg.blink.wifi;
         document.getElementById('blinkRc').checked=cfg.blink.rc;
         document.getElementById('blinkPeriod').value=cfg.blink.period;
+        const pins=cfg.pins;
+        document.getElementById('leftA_pwm').value=pins.leftDriver.motorA.pwm;
+        document.getElementById('leftA_in1').value=pinToString(pins.leftDriver.motorA.in1);
+        document.getElementById('leftA_in2').value=pinToString(pins.leftDriver.motorA.in2);
+        document.getElementById('leftB_pwm').value=pins.leftDriver.motorB.pwm;
+        document.getElementById('leftB_in1').value=pinToString(pins.leftDriver.motorB.in1);
+        document.getElementById('leftB_in2').value=pinToString(pins.leftDriver.motorB.in2);
+        document.getElementById('left_stby').value=pinToString(pins.leftDriver.standby);
+        document.getElementById('rightA_pwm').value=pins.rightDriver.motorA.pwm;
+        document.getElementById('rightA_in1').value=pinToString(pins.rightDriver.motorA.in1);
+        document.getElementById('rightA_in2').value=pinToString(pins.rightDriver.motorA.in2);
+        document.getElementById('rightB_pwm').value=pins.rightDriver.motorB.pwm;
+        document.getElementById('rightB_in1').value=pinToString(pins.rightDriver.motorB.in1);
+        document.getElementById('rightB_in2').value=pinToString(pins.rightDriver.motorB.in2);
+        document.getElementById('right_stby').value=pinToString(pins.rightDriver.standby);
+        document.getElementById('light_pin').value=pinToString(pins.lightBar);
+        document.getElementById('speaker_pin').value=pinToString(pins.speaker);
+        document.getElementById('battery_pin').value=pinToString(pins.batterySense);
+        document.getElementById('pcfAddress').value=pins.pcfAddress;
+        document.getElementById('slave_tx').value=pins.slaveTx;
+        document.getElementById('slave_rx').value=pins.slaveRx;
+        syncPcfSelectors();
+        updatePcfMapFromInputs();
     }catch(e){console.warn(e);}
 }
 async function submitConfig(evt){
@@ -569,6 +862,26 @@ async function submitConfig(evt){
     params.append('blinkWifi',document.getElementById('blinkWifi').checked?'1':'0');
     params.append('blinkRc',document.getElementById('blinkRc').checked?'1':'0');
     params.append('blinkPeriod',document.getElementById('blinkPeriod').value);
+    params.append('leftMotorA_pwm',document.getElementById('leftA_pwm').value);
+    params.append('leftMotorA_in1',document.getElementById('leftA_in1').value);
+    params.append('leftMotorA_in2',document.getElementById('leftA_in2').value);
+    params.append('leftMotorB_pwm',document.getElementById('leftB_pwm').value);
+    params.append('leftMotorB_in1',document.getElementById('leftB_in1').value);
+    params.append('leftMotorB_in2',document.getElementById('leftB_in2').value);
+    params.append('leftDriver_stby',document.getElementById('left_stby').value);
+    params.append('rightMotorA_pwm',document.getElementById('rightA_pwm').value);
+    params.append('rightMotorA_in1',document.getElementById('rightA_in1').value);
+    params.append('rightMotorA_in2',document.getElementById('rightA_in2').value);
+    params.append('rightMotorB_pwm',document.getElementById('rightB_pwm').value);
+    params.append('rightMotorB_in1',document.getElementById('rightB_in1').value);
+    params.append('rightMotorB_in2',document.getElementById('rightB_in2').value);
+    params.append('rightDriver_stby',document.getElementById('right_stby').value);
+    params.append('light_pin',document.getElementById('light_pin').value);
+    params.append('speaker_pin',document.getElementById('speaker_pin').value);
+    params.append('battery_pin',document.getElementById('battery_pin').value);
+    params.append('pcfAddress',document.getElementById('pcfAddress').value);
+    params.append('slave_tx',document.getElementById('slave_tx').value);
+    params.append('slave_rx',document.getElementById('slave_rx').value);
     const res=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:params.toString()});
     if(res.ok){ alert('Settings updated. Device may reboot/reconnect.'); }
 }
@@ -595,6 +908,8 @@ async function importConfigFile(evt){
     else { alert('Import failed.'); }
 }
 document.addEventListener('DOMContentLoaded',()=>{
+    registerPinEditors();
+    attachPcfSelectors();
     loadConfig();
     refreshStatus();
     setInterval(refreshStatus,1000);
@@ -657,6 +972,55 @@ String escapeJson(const String& input) {
         }
     }
     return out;
+}
+
+bool parseIntStrict(const String& text, int& value) {
+    String trimmed = text;
+    trimmed.trim();
+    if (trimmed.isEmpty()) {
+        return false;
+    }
+    int start = 0;
+    if (trimmed[start] == '-' || trimmed[start] == '+') {
+        ++start;
+    }
+    if (start >= trimmed.length()) {
+        return false;
+    }
+    for (int i = start; i < trimmed.length(); ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(trimmed[i]))) {
+            return false;
+        }
+    }
+    value = trimmed.toInt();
+    return true;
+}
+
+bool parsePinString(const String& text, int& value) {
+    String lower = text;
+    lower.trim();
+    if (lower.isEmpty()) {
+        return false;
+    }
+    lower.toLowerCase();
+    if (lower == "none" || lower == "off") {
+        value = -1;
+        return true;
+    }
+    if (lower.startsWith("pcf")) {
+        String suffix = lower.substring(3);
+        suffix.trim();
+        int idx = 0;
+        if (!parseIntStrict(suffix, idx)) {
+            return false;
+        }
+        if (idx < 0 || idx >= 16) {
+            return false;
+        }
+        value = Config::pinFromPcfIndex(idx);
+        return true;
+    }
+    return parseIntStrict(lower, value);
 }
 }  // namespace
 
@@ -758,6 +1122,24 @@ void ControlServer::handleConfigImport() {
         }
         src.toCharArray(dest, len);
         dest[len - 1] = '\0';
+    };
+
+    auto assignPinArg = [&](const char* name, int& target, bool allowPcf) {
+        if (!server_.hasArg(name)) {
+            return;
+        }
+        String raw = server_.arg(name);
+        raw.trim();
+        if (raw.isEmpty()) {
+            return;
+        }
+        int parsed = target;
+        bool ok = allowPcf ? parsePinString(raw, parsed) : parseIntStrict(raw, parsed);
+        if (!ok) {
+            return;
+        }
+        target = parsed;
+        changed = true;
     };
 
     bool ok = parser.parseObject([&](const String& key) {
@@ -1199,6 +1581,27 @@ void ControlServer::handleConfigPost() {
             changed = true;
         }
     }
+
+    assignPinArg("leftMotorA_pwm", config_->pins.leftDriver.motorA.pwm, false);
+    assignPinArg("leftMotorA_in1", config_->pins.leftDriver.motorA.in1, true);
+    assignPinArg("leftMotorA_in2", config_->pins.leftDriver.motorA.in2, true);
+    assignPinArg("leftMotorB_pwm", config_->pins.leftDriver.motorB.pwm, false);
+    assignPinArg("leftMotorB_in1", config_->pins.leftDriver.motorB.in1, true);
+    assignPinArg("leftMotorB_in2", config_->pins.leftDriver.motorB.in2, true);
+    assignPinArg("leftDriver_stby", config_->pins.leftDriver.standby, true);
+    assignPinArg("rightMotorA_pwm", config_->pins.rightDriver.motorA.pwm, false);
+    assignPinArg("rightMotorA_in1", config_->pins.rightDriver.motorA.in1, true);
+    assignPinArg("rightMotorA_in2", config_->pins.rightDriver.motorA.in2, true);
+    assignPinArg("rightMotorB_pwm", config_->pins.rightDriver.motorB.pwm, false);
+    assignPinArg("rightMotorB_in1", config_->pins.rightDriver.motorB.in1, true);
+    assignPinArg("rightMotorB_in2", config_->pins.rightDriver.motorB.in2, true);
+    assignPinArg("rightDriver_stby", config_->pins.rightDriver.standby, true);
+    assignPinArg("light_pin", config_->pins.lightBar, true);
+    assignPinArg("speaker_pin", config_->pins.speaker, true);
+    assignPinArg("battery_pin", config_->pins.batterySense, true);
+    assignPinArg("pcfAddress", config_->pins.pcfAddress, false);
+    assignPinArg("slave_tx", config_->pins.slaveTx, false);
+    assignPinArg("slave_rx", config_->pins.slaveRx, false);
 
     if (changed) {
         if (store_) {
