@@ -289,7 +289,7 @@ class JsonStream {
     size_t pos_ = 0;
 };
 
-const char CONTROL_PAGE_TEMPLATE[] PROGMEM = R"HTML(<!DOCTYPE html>
+const char CONTROL_PAGE_TEMPLATE[] PROGMEM = R"HTML(R"HTML(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -440,33 +440,41 @@ header.hero {
 .pin-card__suggestions {
     display:flex;
     flex-wrap:wrap;
-    gap:0.4rem;
-    margin:0.5rem 0;
+    gap:0.55rem;
+    margin:0.75rem 0;
 }
 .pin-card__suggestions button {
     border:none;
-    border-radius:999px;
-    padding:0.2rem 0.8rem;
+    border-radius:14px;
+    padding:0.55rem 1.1rem;
     background:rgba(255,255,255,0.08);
     color:var(--text);
     cursor:pointer;
-    transition:background 0.2s ease;
+    font-size:0.95rem;
+    min-width:90px;
+    text-align:center;
+    transition:background 0.2s ease, transform 0.2s ease;
 }
 .pin-card__suggestions button:hover {
     background:rgba(255,255,255,0.18);
+}
+.pin-card__suggestions button.selected {
+    background:var(--accent);
+    color:#021214;
+    transform:translateY(-1px);
 }
 .pin-card__overlay, .pin-card__board-popup {
     position:absolute;
     top:50%;
     left:50%;
     transform:translate(-50%,-50%);
-    background:rgba(0,0,0,0.85);
-    border:1px solid rgba(255,255,255,0.1);
-    border-radius:12px;
-    padding:1rem;
-    width:260px;
+    background:linear-gradient(180deg,rgba(2,7,17,0.97),rgba(5,17,32,0.97));
+    border:1px solid rgba(59,227,164,0.35);
+    border-radius:16px;
+    padding:1.25rem;
+    width:280px;
     text-align:center;
-    box-shadow:0 15px 40px rgba(0,0,0,0.5);
+    box-shadow:0 25px 55px rgba(0,0,0,0.6);
     z-index:10;
 }
 .pin-card__overlay.hidden, .pin-card__board-popup.hidden {
@@ -481,29 +489,71 @@ header.hero {
 .pin-card__board {
     margin-top:0.6rem;
     border:none;
-    background:rgba(255,255,255,0.08);
+    background:rgba(255,255,255,0.12);
     color:var(--text);
-    border-radius:10px;
-    padding:0.4rem 0.8rem;
+    border-radius:12px;
+    padding:0.55rem 0.9rem;
     cursor:pointer;
+    transition:background 0.2s ease;
+}
+.pin-card__board:hover {
+    background:rgba(255,255,255,0.18);
 }
 .pin-card__board-popup {
     display:flex;
     flex-direction:column;
-    gap:0.4rem;
+    gap:0.65rem;
+}
+.pin-card__board-popup strong {
+    display:block;
+    font-size:1rem;
+    margin-bottom:0.15rem;
+}
+.pin-card__board-popup p {
+    margin:0;
+    color:var(--muted);
+    font-size:0.85rem;
 }
 .pin-card__board-options {
     display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
-    gap:0.4rem;
+    grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+    gap:0.5rem;
 }
 .pin-card__board-option {
     border:none;
-    border-radius:8px;
-    padding:0.3rem 0.4rem;
-    background:rgba(255,255,255,0.07);
+    border-radius:10px;
+    padding:0.5rem 0.6rem;
+    background:rgba(255,255,255,0.1);
     color:var(--text);
     cursor:pointer;
+    min-height:42px;
+}
+.pin-card__board-option:hover {
+    background:rgba(59,227,164,0.2);
+}
+.pin-card--static {
+    background:rgba(59,227,164,0.04);
+    border-color:rgba(59,227,164,0.35);
+}
+.pin-card--static .pin-card__value {
+    color:var(--accent);
+    font-weight:600;
+}
+.pin-card--static.free .pin-card__value {
+    color:var(--muted);
+}
+.pin-card__static-meta {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:0.35rem;
+    font-size:0.8rem;
+    color:var(--muted);
+}
+.pin-card__static-pill {
+    border-radius:999px;
+    padding:0.2rem 0.9rem;
+    background:rgba(255,255,255,0.09);
 }
 .pin-card__message { min-height:1.25rem; font-size:0.8rem; }
 .pin-card__message.success { color:var(--accent); }
@@ -568,10 +618,12 @@ header.hero {
                 <h2>Pin assignments</h2>
                 <p style="margin:0; color:var(--muted);">Cards show current owners, allowed values, and whether PCA/PCF expanders are supported.</p>
             </div>
-            <div class="tabs">
-                <button data-board="master" class="active">Master ESP</button>
-                <button data-board="slave">Slave ESP</button>
-            </div>
+        <div class="tabs">
+            <button data-board="master" class="active">Master ESP</button>
+            <button data-board="slave">Slave ESP</button>
+            <button data-board="pcf8575">PCF8575 Expander</button>
+            <button data-board="pca9685">PCA9685 PWM</button>
+        </div>
         </header>
         <div class="pin-grid" id="pinGrid"></div>
     </section>
@@ -598,6 +650,29 @@ const refreshIntervalMs = 4000;
 const pinInputState = {};
 const boardOverrides = loadBoardOverrides();
 const boardList = Array.from(new Set(pinSchema.map(entry => entry.board)));
+const boardTypeMap = {
+    master: 'schema',
+    slave: 'schema',
+    pcf8575: 'pcf',
+    pca9685: 'pca',
+};
+const suggestionSelections = {};
+const boardPopupState = { token: null };
+let activeInputSnapshot = null;
+const pcaChannelSpecs = [
+    { path: 'lighting.channels.frontLeft.r', label: 'Front-left red', owner: 'Lighting · Front-left', description: 'Red PWM for the front-left headlights.', type: 'RGB component' },
+    { path: 'lighting.channels.frontLeft.g', label: 'Front-left green', owner: 'Lighting · Front-left', description: 'Green PWM for the front-left headlights.', type: 'RGB component' },
+    { path: 'lighting.channels.frontLeft.b', label: 'Front-left blue', owner: 'Lighting · Front-left', description: 'Blue PWM for the front-left headlights.', type: 'RGB component' },
+    { path: 'lighting.channels.frontRight.r', label: 'Front-right red', owner: 'Lighting · Front-right', description: 'Red PWM for the front-right headlights.', type: 'RGB component' },
+    { path: 'lighting.channels.frontRight.g', label: 'Front-right green', owner: 'Lighting · Front-right', description: 'Green PWM for the front-right headlights.', type: 'RGB component' },
+    { path: 'lighting.channels.frontRight.b', label: 'Front-right blue', owner: 'Lighting · Front-right', description: 'Blue PWM for the front-right headlights.', type: 'RGB component' },
+    { path: 'lighting.channels.rearLeft.r', label: 'Rear-left red', owner: 'Lighting · Rear-left', description: 'Red PWM for the rear-left reverse lights.', type: 'RGB component' },
+    { path: 'lighting.channels.rearLeft.g', label: 'Rear-left green', owner: 'Lighting · Rear-left', description: 'Green PWM for the rear-left reverse lights.', type: 'RGB component' },
+    { path: 'lighting.channels.rearLeft.b', label: 'Rear-left blue', owner: 'Lighting · Rear-left', description: 'Blue PWM for the rear-left reverse lights.', type: 'RGB component' },
+    { path: 'lighting.channels.rearRight.r', label: 'Rear-right red', owner: 'Lighting · Rear-right', description: 'Red PWM for the rear-right reverse lights.', type: 'RGB component' },
+    { path: 'lighting.channels.rearRight.g', label: 'Rear-right green', owner: 'Lighting · Rear-right', description: 'Green PWM for the rear-right reverse lights.', type: 'RGB component' },
+    { path: 'lighting.channels.rearRight.b', label: 'Rear-right blue', owner: 'Lighting · Rear-right', description: 'Blue PWM for the rear-right reverse lights.', type: 'RGB component' },
+];
 
 function showToast(message, tone = 'info') {
     toast.textContent = message;
@@ -755,12 +830,60 @@ function validatePinValue(entry, raw) {
     return { valid: true, value: String(number) };
 }
 
+
+function captureActiveInputState() {
+    const active = document.activeElement;
+    if (active && active.tagName === 'INPUT' && active.dataset.token) {
+        activeInputSnapshot = {
+            token: active.dataset.token,
+            value: active.value,
+            selectionStart: active.selectionStart,
+            selectionEnd: active.selectionEnd,
+        };
+        pinInputState[active.dataset.token] = active.value;
+        return;
+    }
+    activeInputSnapshot = null;
+}
+
+function restoreActiveInputState() {
+    if (!activeInputSnapshot) {
+        return;
+    }
+    const input = pinGrid.querySelector(`input[data-token="${activeInputSnapshot.token}"]`);
+    if (input) {
+        input.value = activeInputSnapshot.value;
+        if (typeof activeInputSnapshot.selectionStart === 'number' && typeof activeInputSnapshot.selectionEnd === 'number') {
+            try {
+                input.setSelectionRange(activeInputSnapshot.selectionStart, activeInputSnapshot.selectionEnd);
+            } catch (err) {
+                // ignore invalid ranges
+            }
+        }
+        input.focus();
+    }
+    activeInputSnapshot = null;
+}
+
 function renderPinCards() {
     if (!config) {
         pinGrid.innerHTML = '';
         return;
     }
     const assigned = gatherAssignedPins();
+    captureActiveInputState();
+    const boardType = boardTypeMap[activeBoard] || 'schema';
+    if (boardType === 'pcf') {
+        renderPcfBoard(assigned);
+    } else if (boardType === 'pca') {
+        renderPcaBoard();
+    } else {
+        renderSchemaBoard(assigned);
+    }
+    restoreActiveInputState();
+}
+
+function renderSchemaBoard(assigned) {
     const entries = pinSchema.filter(entry => getEntryBoard(entry) === activeBoard);
     pinGrid.innerHTML = entries.map((entry, index) => {
         const currentValue = formatPinValue(getValueFromPath(entry.path));
@@ -796,18 +919,19 @@ function renderPinCards() {
                         <button type="button" class="overlay-cancel">Cancel</button>
                     </div>
                 </div>
-                <div class="pin-card__board-popup hidden">
-                    <p>Choose target board</p>
+                <div class="pin-card__board-popup hidden" role="dialog" aria-modal="true">
+                    <strong>Move this pin</strong>
+                    <p>Select the board that should own this signal.</p>
                     <div class="pin-card__board-options"></div>
                 </div>
             </article>
         `;
     }).join('');
     pinGrid.querySelectorAll('.pin-card').forEach(card => {
-        const input = card.querySelector('input');
-        const button = card.querySelector('button');
-        const message = card.querySelector('.pin-card__message');
         const entry = entries[Number(card.dataset.index)];
+        const input = card.querySelector('input');
+        const setButton = card.querySelector('.pin-card__input button');
+        const message = card.querySelector('.pin-card__message');
         const suggestions = card.querySelector('.pin-card__suggestions');
         const overlay = card.querySelector('.pin-card__overlay');
         const overlaySource = overlay.querySelector('.overlay-source');
@@ -816,12 +940,15 @@ function renderPinCards() {
         const boardBtn = card.querySelector('.pin-card__board');
         const boardPopup = card.querySelector('.pin-card__board-popup');
         const boardOptions = boardPopup.querySelector('.pin-card__board-options');
-        updateSuggestions(entry, suggestions, assigned, input);
+        updateSuggestions(entry, suggestions, assigned);
+        bindSuggestionHandlers(entry, suggestions, input, message, overlay, overlaySource, assigned);
         input.addEventListener('input', () => {
             pinInputState[entry.token] = input.value;
-            updateSuggestions(entry, suggestions, assigned, input);
+            suggestionSelections[entry.token] = null;
+            updateSuggestions(entry, suggestions, assigned);
+            bindSuggestionHandlers(entry, suggestions, input, message, overlay, overlaySource, assigned);
         });
-        button.addEventListener('click', () => handleSetRequest(entry, input, message, assigned, overlay, overlaySource));
+        setButton.addEventListener('click', () => handleSetRequest(entry, input, message, assigned, overlay, overlaySource));
         overlayConfirm.addEventListener('click', () => {
             overlay.classList.add('hidden');
             handleSetRequest(entry, input, message, assigned, null, null, true);
@@ -835,27 +962,121 @@ function renderPinCards() {
             opt.addEventListener('click', () => {
                 boardOverrides[entry.token] = opt.dataset.board;
                 saveBoardOverrides();
+                boardPopupState.token = null;
                 boardPopup.classList.add('hidden');
                 renderPinCards();
             });
         });
-        boardBtn.addEventListener('click', () => {
-            boardPopup.classList.toggle('hidden');
+        const isPopupOpen = boardPopupState.token === entry.token;
+        boardPopup.classList.toggle('hidden', !isPopupOpen);
+        boardPopup.addEventListener('click', event => event.stopPropagation());
+        boardBtn.addEventListener('click', event => {
+            event.stopPropagation();
+            const isOpen = !boardPopup.classList.contains('hidden');
+            if (isOpen) {
+                boardPopupState.token = null;
+                boardPopup.classList.add('hidden');
+                return;
+            }
+            boardPopupState.token = entry.token;
+            boardPopup.classList.remove('hidden');
         });
     });
 }
 
-function updateSuggestions(entry, container, assignedMap, input) {
+function renderPcfBoard(assigned) {
+    const cards = [];
+    for (let idx = 0; idx < 16; idx++) {
+        const key = `pcf${idx}`;
+        const occupant = assigned.get(key);
+        const owner = occupant ? occupant.owner : 'Available channel';
+        const description = occupant ? occupant.description : 'This expander pin is free to claim.';
+        const valueLabel = occupant ? occupant.label : `pcf${idx}`;
+        const hint = occupant ? occupant.type : 'PCF8575 I/O';
+        const extraClass = occupant ? '' : ' free';
+        cards.push(`
+            <article class="pin-card pin-card--static${extraClass}">
+                <div class="pin-card__head">
+                    <div>
+                        <strong>PCF8575 I/O ${idx}</strong>
+                        <div class="pin-card__owner">${owner}</div>
+                    </div>
+                    <div class="pin-card__value">${valueLabel}</div>
+                </div>
+                <p class="pin-card__desc">${description}</p>
+                <div class="pin-card__static-meta">
+                    <span>${hint}</span>
+                    <span class="pin-card__static-pill">${occupant ? 'Assigned' : 'Open'}</span>
+                </div>
+            </article>
+        `);
+    }
+    pinGrid.innerHTML = cards.join('');
+}
+
+function renderPcaBoard() {
+    const channelMap = new Map();
+    for (const spec of pcaChannelSpecs) {
+        const value = getValueFromPath(spec.path);
+        if (typeof value === 'number' && value >= 0 && value < 16) {
+            channelMap.set(value, spec);
+        }
+    }
+    const cards = [];
+    for (let channel = 0; channel < 16; channel++) {
+        const spec = channelMap.get(channel);
+        const owner = spec ? spec.owner : 'Available channel';
+        const description = spec ? spec.description : 'No configuration is using this channel.';
+        const label = spec ? spec.label : `Channel ${channel}`;
+        const extraClass = spec ? '' : ' free';
+        cards.push(`
+            <article class="pin-card pin-card--static${extraClass}">
+                <div class="pin-card__head">
+                    <div>
+                        <strong>PCA9685 Channel ${channel}</strong>
+                        <div class="pin-card__owner">${owner}</div>
+                    </div>
+                    <div class="pin-card__value">${label}</div>
+                </div>
+                <p class="pin-card__desc">${description}</p>
+                <div class="pin-card__static-meta">
+                    <span>${spec ? spec.type : 'Unassigned'}</span>
+                    <span class="pin-card__static-pill">Slot ${channel}</span>
+                </div>
+            </article>
+        `);
+    }
+    pinGrid.innerHTML = cards.join('');
+}
+
+function updateSuggestions(entry, container, assignedMap) {
     const options = computeFreePins(entry, assignedMap);
     if (!options.length) {
         container.innerHTML = '';
         return;
     }
     container.innerHTML = options.map(value => `<button type="button" data-value="${value}">${value}</button>`).join('');
+}
+
+function bindSuggestionHandlers(entry, container, input, message, overlay, overlaySource, assignedMap) {
     container.querySelectorAll('button').forEach(button => {
-        button.addEventListener('click', () => {
-            input.value = button.dataset.value;
-            pinInputState[entry.token] = input.value;
+        const value = button.dataset.value;
+        button.classList.toggle('selected', suggestionSelections[entry.token] === value);
+        button.addEventListener('click', event => {
+            event.stopPropagation();
+            const currentlySelected = suggestionSelections[entry.token];
+            if (currentlySelected === value) {
+                suggestionSelections[entry.token] = null;
+                container.querySelectorAll('button').forEach(btn => btn.classList.remove('selected'));
+                handleSetRequest(entry, input, message, assignedMap, overlay, overlaySource, false, value);
+            } else {
+                suggestionSelections[entry.token] = value;
+                container.querySelectorAll('button').forEach(btn => btn.classList.toggle('selected', btn === button));
+                if (message) {
+                    message.textContent = `Click again to assign ${value}.`;
+                    message.className = 'pin-card__message';
+                }
+            }
         });
     });
 }
@@ -887,8 +1108,9 @@ function computeFreePins(entry, assignedMap) {
     return options;
 }
 
-function handleSetRequest(entry, input, message, assignedMap, overlay, overlaySource, forced = false) {
-    const result = validatePinValue(entry, input.value);
+function handleSetRequest(entry, input, message, assignedMap, overlay, overlaySource, forced = false, overrideValue = null) {
+    const rawValue = overrideValue !== null ? overrideValue : input.value;
+    const result = validatePinValue(entry, rawValue);
     if (!result.valid) {
         message.textContent = result.message;
         message.className = 'pin-card__message error';
@@ -913,6 +1135,7 @@ function applyPinChange(entry, input, message, value) {
         .then(() => {
             message.textContent = 'Updated';
             message.className = 'pin-card__message success';
+            suggestionSelections[entry.token] = null;
             input.value = '';
             pinInputState[entry.token] = '';
         })
@@ -959,6 +1182,7 @@ async function postConfig(payload) {
 
 function setActiveBoard(board) {
     activeBoard = board;
+    boardPopupState.token = null;
     boardButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.board === board));
     renderPinCards();
 }
@@ -966,6 +1190,17 @@ function setActiveBoard(board) {
 document.addEventListener('DOMContentLoaded', () => {
     boardButtons.forEach(button => {
         button.addEventListener('click', () => setActiveBoard(button.dataset.board));
+    });
+    document.addEventListener('click', event => {
+        if (boardPopupState.token &&
+            !event.target.closest('.pin-card__board-popup') &&
+            !event.target.closest('.pin-card__board')) {
+            const openPopup = pinGrid.querySelector('.pin-card__board-popup:not(.hidden)');
+            if (openPopup) {
+                openPopup.classList.add('hidden');
+            }
+            boardPopupState.token = null;
+        }
     });
     Promise.all([refreshConfig(), refreshStatus()])
         .catch(err => showToast(err.message, 'danger'));
