@@ -7,6 +7,7 @@
 #include "config/features.h"
 
 namespace TankRC::Config {
+<<<<<<< HEAD
 constexpr std::uint32_t kConfigVersion = 10;
 
 enum class PinOwner : std::uint8_t { Slave = 0, IoExpander = 1 };
@@ -17,6 +18,9 @@ struct OwnedPin {
     PinOwner owner = PinOwner::Slave;
     std::uint8_t reserved = 0;
 };
+=======
+constexpr std::uint32_t kConfigVersion = 6;
+>>>>>>> parent of 45be129 (better help ui)
 
 struct ChannelPins {
     int pwm = -1;
