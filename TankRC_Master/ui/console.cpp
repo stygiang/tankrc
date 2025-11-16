@@ -316,6 +316,7 @@ void printHelpSection(const __FlashStringHelper* title, const HelpEntry (&entrie
 }
 
 static const HelpEntry kHelpQuickCommands[] = {
+    {F("menu"), F("Open the interactive dashboard")},
     {F("show / s"), F("Print current runtime configuration")},
     {F("pin <token> [value]"), F("Inspect or change a single pin assignment")},
     {F("load / ld"), F("Reload the last saved settings")},
@@ -337,6 +338,7 @@ static const HelpEntry kHelpMaintenance[] = {
 static const HelpEntry kHelpShortcuts[] = {
     {F("help"), F("Open the interactive help hub")},
     {F("? or h"), F("Show the quick reference")},
+    {F("menu"), F("Launch the primary dashboard menu")},
     {F("pin help"), F("List pin-token names for the 'pin' command")},
 };
 
@@ -345,12 +347,15 @@ void showHelp() {
     console.println(F("+=============================================+"));
     console.println(F("| TankRC Serial Console - Quick Reference     |"));
     console.println(F("+=============================================+"));
-    printHelpSection(F("Quick Commands"), kHelpQuickCommands);
-    printHelpSection(F("Setup Wizards"), kHelpWizards);
-    printHelpSection(F("Maintenance"), kHelpMaintenance);
-    printHelpSection(F("Help & Tips"), kHelpShortcuts);
-    console.println();
-    console.println(F("Type 'help' to launch the interactive help hub."));
+    console.println(F("menu       : Open the interactive dashboard"));
+    console.println(F("show / s   : Print current runtime configuration"));
+    console.println(F("pin ...    : Inspect or change a single pin"));
+    console.println(F("wf / wp / ww / wt : Feature, Pin, Wi-Fi, and Test wizards"));
+    console.println(F("save / load: Persist or reload settings"));
+    console.println(F("defaults / reset: Restore factory defaults or clear flash"));
+    console.println(F("help / h   : Quick help, 'pin help' for pin tokens"));
+    console.println(F("---------------------------------------------"));
+    console.println(F("Try 'menu' for the compact dashboard."));
 }
 
 void runHelpMenu() {
@@ -641,6 +646,531 @@ void showPinSummary(const Config::RuntimeConfig& config) {
     console.printf("Slave TX/RX: %d/%d | PCF addr: %d\n", pins.slaveTx, pins.slaveRx, pins.pcfAddress);
 }
 
+enum class WizardValueType {
+    Int,
+    Uint8,
+    Uint16,
+};
+
+struct PinWizardBinding {
+    String token;
+    String label;
+    WizardValueType valueType;
+    void* valuePtr;
+    int baselineValue;
+    bool allowPcf;
+};
+
+int clampToRange(int value, int minValue, int maxValue) {
+    if (value < minValue) return minValue;
+    if (value > maxValue) return maxValue;
+    return value;
+}
+
+int readBindingValue(const PinWizardBinding& binding) {
+    switch (binding.valueType) {
+        case WizardValueType::Int:
+            return *static_cast<int*>(binding.valuePtr);
+        case WizardValueType::Uint8:
+            return static_cast<int>(*static_cast<std::uint8_t*>(binding.valuePtr));
+        case WizardValueType::Uint16:
+            return static_cast<int>(*static_cast<std::uint16_t*>(binding.valuePtr));
+    }
+    return 0;
+}
+
+void writeBindingValue(const PinWizardBinding& binding, int value) {
+    switch (binding.valueType) {
+        case WizardValueType::Int:
+            *static_cast<int*>(binding.valuePtr) = value;
+            break;
+        case WizardValueType::Uint8: {
+            int clamped = clampToRange(value, 0, 255);
+            *static_cast<std::uint8_t*>(binding.valuePtr) = static_cast<std::uint8_t>(clamped);
+            break;
+        }
+        case WizardValueType::Uint16: {
+            int clamped = clampToRange(value, 0, 65535);
+            *static_cast<std::uint16_t*>(binding.valuePtr) = static_cast<std::uint16_t>(clamped);
+            break;
+        }
+    }
+}
+
+std::vector<PinWizardBinding> buildPinWizardBindings(Config::RuntimeConfig& working, const Config::RuntimeConfig& baseline) {
+    std::vector<PinWizardBinding> bindings;
+    bindings.reserve(48);
+    auto addInt = [&](const String& token, const String& label, int& current, int baselineValue, bool allowPcf) {
+        PinWizardBinding binding;
+        binding.token = token;
+        binding.label = label;
+        binding.valueType = WizardValueType::Int;
+        binding.valuePtr = &current;
+        binding.baselineValue = baselineValue;
+        binding.allowPcf = allowPcf;
+        bindings.push_back(binding);
+    };
+    auto addUint8 = [&](const String& token, const String& label, std::uint8_t& current, std::uint8_t baselineValue) {
+        PinWizardBinding binding;
+        binding.token = token;
+        binding.label = label;
+        binding.valueType = WizardValueType::Uint8;
+        binding.valuePtr = &current;
+        binding.baselineValue = static_cast<int>(baselineValue);
+        binding.allowPcf = false;
+        bindings.push_back(binding);
+    };
+    auto addUint16 = [&](const String& token, const String& label, std::uint16_t& current, std::uint16_t baselineValue) {
+        PinWizardBinding binding;
+        binding.token = token;
+        binding.label = label;
+        binding.valueType = WizardValueType::Uint16;
+        binding.valuePtr = &current;
+        binding.baselineValue = static_cast<int>(baselineValue);
+        binding.allowPcf = false;
+        bindings.push_back(binding);
+    };
+
+    auto& pins = working.pins;
+    const auto& basePins = baseline.pins;
+    addInt("lma_pwm", "Left motor A PWM", pins.leftDriver.motorA.pwm, basePins.leftDriver.motorA.pwm, false);
+    addInt("lma_in1", "Left motor A IN1", pins.leftDriver.motorA.in1, basePins.leftDriver.motorA.in1, true);
+    addInt("lma_in2", "Left motor A IN2", pins.leftDriver.motorA.in2, basePins.leftDriver.motorA.in2, true);
+    addInt("lmb_pwm", "Left motor B PWM", pins.leftDriver.motorB.pwm, basePins.leftDriver.motorB.pwm, false);
+    addInt("lmb_in1", "Left motor B IN1", pins.leftDriver.motorB.in1, basePins.leftDriver.motorB.in1, true);
+    addInt("lmb_in2", "Left motor B IN2", pins.leftDriver.motorB.in2, basePins.leftDriver.motorB.in2, true);
+    addInt("left_stby", "Left driver STBY", pins.leftDriver.standby, basePins.leftDriver.standby, true);
+
+    addInt("rma_pwm", "Right motor A PWM", pins.rightDriver.motorA.pwm, basePins.rightDriver.motorA.pwm, false);
+    addInt("rma_in1", "Right motor A IN1", pins.rightDriver.motorA.in1, basePins.rightDriver.motorA.in1, true);
+    addInt("rma_in2", "Right motor A IN2", pins.rightDriver.motorA.in2, basePins.rightDriver.motorA.in2, true);
+    addInt("rmb_pwm", "Right motor B PWM", pins.rightDriver.motorB.pwm, basePins.rightDriver.motorB.pwm, false);
+    addInt("rmb_in1", "Right motor B IN1", pins.rightDriver.motorB.in1, basePins.rightDriver.motorB.in1, true);
+    addInt("rmb_in2", "Right motor B IN2", pins.rightDriver.motorB.in2, basePins.rightDriver.motorB.in2, true);
+    addInt("right_stby", "Right driver STBY", pins.rightDriver.standby, basePins.rightDriver.standby, true);
+
+    addInt("lightbar", "Light bar", pins.lightBar, basePins.lightBar, true);
+    addInt("speaker", "Speaker", pins.speaker, basePins.speaker, true);
+    addInt("battery", "Battery sense", pins.batterySense, basePins.batterySense, true);
+    addInt("slave_tx", "Slave link TX", pins.slaveTx, basePins.slaveTx, false);
+    addInt("slave_rx", "Slave link RX", pins.slaveRx, basePins.slaveRx, false);
+    addInt("pcf_addr", "PCF8575 address", pins.pcfAddress, basePins.pcfAddress, false);
+
+    auto& lighting = working.lighting;
+    const auto& baseLighting = baseline.lighting;
+    addUint8("pca_addr", "PCA9685 address", lighting.pcaAddress, baseLighting.pcaAddress);
+    addUint16("pca_freq", "PCA9685 PWM frequency", lighting.pwmFrequency, baseLighting.pwmFrequency);
+    addInt("fl_r", "Front left red", lighting.channels.frontLeft.r, baseLighting.channels.frontLeft.r, false);
+    addInt("fl_g", "Front left green", lighting.channels.frontLeft.g, baseLighting.channels.frontLeft.g, false);
+    addInt("fl_b", "Front left blue", lighting.channels.frontLeft.b, baseLighting.channels.frontLeft.b, false);
+    addInt("fr_r", "Front right red", lighting.channels.frontRight.r, baseLighting.channels.frontRight.r, false);
+    addInt("fr_g", "Front right green", lighting.channels.frontRight.g, baseLighting.channels.frontRight.g, false);
+    addInt("fr_b", "Front right blue", lighting.channels.frontRight.b, baseLighting.channels.frontRight.b, false);
+    addInt("rl_r", "Rear left red", lighting.channels.rearLeft.r, baseLighting.channels.rearLeft.r, false);
+    addInt("rl_g", "Rear left green", lighting.channels.rearLeft.g, baseLighting.channels.rearLeft.g, false);
+    addInt("rl_b", "Rear left blue", lighting.channels.rearLeft.b, baseLighting.channels.rearLeft.b, false);
+    addInt("rr_r", "Rear right red", lighting.channels.rearRight.r, baseLighting.channels.rearRight.r, false);
+    addInt("rr_g", "Rear right green", lighting.channels.rearRight.g, baseLighting.channels.rearRight.g, false);
+    addInt("rr_b", "Rear right blue", lighting.channels.rearRight.b, baseLighting.channels.rearRight.b, false);
+
+    auto& rc = working.rc;
+    const auto& baseRc = baseline.rc;
+    for (std::size_t i = 0; i < std::size(rc.channelPins); ++i) {
+        String token = "rc" + String(static_cast<unsigned>(i + 1));
+        String label = "RC channel " + String(static_cast<unsigned>(i + 1));
+        addInt(token, label, rc.channelPins[i], baseRc.channelPins[i], false);
+    }
+
+    return bindings;
+}
+
+const PinWizardBinding* findPinWizardBinding(const std::vector<PinWizardBinding>& bindings, const String& token) {
+    for (const auto& binding : bindings) {
+        if (binding.token == token) {
+            return &binding;
+        }
+    }
+    return nullptr;
+}
+
+std::size_t countPendingPinChanges(const std::vector<PinWizardBinding>& bindings) {
+    std::size_t count = 0;
+    for (const auto& binding : bindings) {
+        if (readBindingValue(binding) != binding.baselineValue) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool tryHandleQuickPinEdit(const String& input, std::vector<PinWizardBinding>& bindings) {
+    String trimmed = input;
+    trimmed.trim();
+    if (trimmed.isEmpty()) {
+        return false;
+    }
+
+    int eq = trimmed.indexOf('=');
+    int space = trimmed.indexOf(' ');
+    int split = -1;
+    if (eq >= 0 && (space < 0 || eq < space)) {
+        split = eq;
+    } else if (space >= 0) {
+        split = space;
+    }
+    if (split <= 0) {
+        return false;
+    }
+
+    String token = trimmed.substring(0, split);
+    String value = trimmed.substring(split + 1);
+    token.trim();
+    value.trim();
+    if (token.isEmpty() || value.isEmpty()) {
+        return false;
+    }
+    token.toLowerCase();
+
+    const PinWizardBinding* binding = findPinWizardBinding(bindings, token);
+    if (!binding) {
+        console.printf("Unknown pin token '%s'. Type '?' for the command list.\n", token.c_str());
+        return true;
+    }
+
+    int parsed = 0;
+    bool ok = binding->allowPcf ? parsePinValue(value, parsed) : parseIntStrict(value, parsed);
+    if (!ok) {
+        console.println(F("Invalid value. Use GPIO numbers or pcf# (e.g. pcf3)."));
+        return true;
+    }
+
+    if (readBindingValue(*binding) == parsed) {
+        console.println(F("Value unchanged."));
+        return true;
+    }
+
+    writeBindingValue(*binding, parsed);
+    const int stored = readBindingValue(*binding);
+    const String display = binding->allowPcf ? formatPinValue(stored) : String(stored);
+    console.printf("%s set to %s\n", binding->label.c_str(), display.c_str());
+    return true;
+}
+
+bool tryShowPinBindingValue(const String& input, const std::vector<PinWizardBinding>& bindings) {
+    String token = input;
+    token.trim();
+    if (token.isEmpty()) {
+        return false;
+    }
+    if (token.indexOf(' ') >= 0 || token.indexOf('=') >= 0) {
+        return false;
+    }
+    token.toLowerCase();
+    const PinWizardBinding* binding = findPinWizardBinding(bindings, token);
+    if (!binding) {
+        return false;
+    }
+    const int value = readBindingValue(*binding);
+    const String display = binding->allowPcf ? formatPinValue(value) : String(value);
+    console.printf("%s [%s] = %s\n", binding->label.c_str(), binding->token.c_str(), display.c_str());
+    return true;
+}
+
+void printSessionPinDiff(const std::vector<PinWizardBinding>& bindings) {
+    bool any = false;
+    for (const auto& binding : bindings) {
+        if (readBindingValue(binding) == binding.baselineValue) {
+            continue;
+        }
+        if (!any) {
+            console.println(F("--- Pending pin changes ---"));
+            any = true;
+        }
+        const String before = binding.allowPcf ? formatPinValue(binding.baselineValue) : String(binding.baselineValue);
+        const int value = readBindingValue(binding);
+        const String after = binding.allowPcf ? formatPinValue(value) : String(value);
+        console.printf("%-18s: %s -> %s\n", binding.label.c_str(), before.c_str(), after.c_str());
+    }
+    if (!any) {
+        console.println(F("No pending pin changes."));
+    }
+}
+
+bool isLightingTokenName(const String& token) {
+    static const char* const kTokens[] = {
+        "pca_addr", "pca_freq", "fl_r", "fl_g", "fl_b", "fr_r", "fr_g", "fr_b",
+        "rl_r",     "rl_g",     "rl_b", "rr_r", "rr_g", "rr_b",
+    };
+    for (const char* name : kTokens) {
+        if (token == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void renderIoPortExpanderSummary(const Config::RuntimeConfig& config) {
+    console.println();
+    console.println(F(" IO Port Expander (PCA9685 lighting board)"));
+    console.printf("  Address: 0x%02X [pca_addr]   PWM freq: %u Hz [pca_freq]\n",
+                   config.lighting.pcaAddress,
+                   config.lighting.pwmFrequency);
+    auto printRgb = [](const char* name,
+                       const Config::RgbChannel& rgb,
+                       const char* rToken,
+                       const char* gToken,
+                       const char* bToken) {
+        console.printf("  %-10s R:%-3d [%s]  G:%-3d [%s]  B:%-3d [%s]\n",
+                       name,
+                       rgb.r,
+                       rToken,
+                       rgb.g,
+                       gToken,
+                       rgb.b,
+                       bToken);
+    };
+    printRgb("Front L", config.lighting.channels.frontLeft, "fl_r", "fl_g", "fl_b");
+    printRgb("Front R", config.lighting.channels.frontRight, "fr_r", "fr_g", "fr_b");
+    printRgb("Rear L", config.lighting.channels.rearLeft, "rl_r", "rl_g", "rl_b");
+    printRgb("Rear R", config.lighting.channels.rearRight, "rr_r", "rr_g", "rr_b");
+
+    std::array<String, 16> channelUsage;
+    for (auto& entry : channelUsage) {
+        entry = F("unused");
+    }
+    auto tagChannel = [&](int channel, const char* label, const char* token) {
+        if (channel < 0 || channel >= static_cast<int>(channelUsage.size())) {
+            return;
+        }
+        channelUsage[channel] = String(label) + " [" + token + "]";
+    };
+    tagChannel(config.lighting.channels.frontLeft.r, "Front L R", "fl_r");
+    tagChannel(config.lighting.channels.frontLeft.g, "Front L G", "fl_g");
+    tagChannel(config.lighting.channels.frontLeft.b, "Front L B", "fl_b");
+    tagChannel(config.lighting.channels.frontRight.r, "Front R R", "fr_r");
+    tagChannel(config.lighting.channels.frontRight.g, "Front R G", "fr_g");
+    tagChannel(config.lighting.channels.frontRight.b, "Front R B", "fr_b");
+    tagChannel(config.lighting.channels.rearLeft.r, "Rear L R", "rl_r");
+    tagChannel(config.lighting.channels.rearLeft.g, "Rear L G", "rl_g");
+    tagChannel(config.lighting.channels.rearLeft.b, "Rear L B", "rl_b");
+    tagChannel(config.lighting.channels.rearRight.r, "Rear R R", "rr_r");
+    tagChannel(config.lighting.channels.rearRight.g, "Rear R G", "rr_g");
+    tagChannel(config.lighting.channels.rearRight.b, "Rear R B", "rr_b");
+
+    console.println(F("  Channel map:"));
+    for (int row = 0; row < 16; row += 4) {
+        console.print(F("   "));
+        for (int col = 0; col < 4; ++col) {
+            int channel = row + col;
+            console.printf("CH%02d: %-20s", channel, channelUsage[channel].c_str());
+            if (col < 3) {
+                console.print(F("  "));
+            }
+        }
+        console.println();
+    }
+}
+
+void renderDriverChannelRow(const char* name,
+                            const Config::ChannelPins& channel,
+                            const char* pwmToken,
+                            const char* in1Token,
+                            const char* in2Token) {
+    String in1 = formatPinValue(channel.in1);
+    String in2 = formatPinValue(channel.in2);
+    console.printf("  %-12s PWM:%-4d [%s]  IN1:%-7s [%s]  IN2:%-7s [%s]\n",
+                   name,
+                   channel.pwm,
+                   pwmToken,
+                   in1.c_str(),
+                   in1Token,
+                   in2.c_str(),
+                   in2Token);
+}
+
+void renderPinField(const char* label, const char* token, int value, bool allowPcf) {
+    String display = allowPcf ? formatPinValue(value) : String(value);
+    console.printf("  %-18s %-8s", label, display.c_str());
+    if (token && token[0]) {
+        console.printf(" [%s]", token);
+    }
+    console.println();
+}
+
+void renderPinWizardDashboard(const Config::RuntimeConfig& config, const std::vector<PinWizardBinding>& bindings) {
+    const auto& pins = config.pins;
+    console.println();
+    console.println(F("==============================================================================="));
+    console.println(F("                          Pin Assignment Dashboard"));
+    console.println(F("==============================================================================="));
+    console.println(F(" Drivers"));
+    renderDriverChannelRow("Left Motor A", pins.leftDriver.motorA, "lma_pwm", "lma_in1", "lma_in2");
+    renderDriverChannelRow("Left Motor B", pins.leftDriver.motorB, "lmb_pwm", "lmb_in1", "lmb_in2");
+    renderPinField("Left STBY", "left_stby", pins.leftDriver.standby, true);
+    console.println();
+    renderDriverChannelRow("Right Motor A", pins.rightDriver.motorA, "rma_pwm", "rma_in1", "rma_in2");
+    renderDriverChannelRow("Right Motor B", pins.rightDriver.motorB, "rmb_pwm", "rmb_in1", "rmb_in2");
+    renderPinField("Right STBY", "right_stby", pins.rightDriver.standby, true);
+
+    console.println();
+    console.println(F(" Peripherals & Links"));
+    renderPinField("Light bar", "lightbar", pins.lightBar, true);
+    renderPinField("Speaker", "speaker", pins.speaker, true);
+    renderPinField("Battery sense", "battery", pins.batterySense, true);
+    console.printf("  Slave TX: %-4d [slave_tx]   Slave RX: %-4d [slave_rx]\n", pins.slaveTx, pins.slaveRx);
+    console.printf("  PCF8575 addr: %d [pcf_addr]\n", pins.pcfAddress);
+
+    console.println();
+    console.println(F(" RC Receiver (PWM inputs)"));
+    for (std::size_t i = 0; i < std::size(config.rc.channelPins); ++i) {
+        console.printf("  CH%u: %-4d [rc%u]\n",
+                       static_cast<unsigned>(i + 1),
+                       config.rc.channelPins[i],
+                       static_cast<unsigned>(i + 1));
+    }
+
+    renderIoPortExpanderSummary(config);
+
+    const std::size_t pending = countPendingPinChanges(bindings);
+    console.println();
+    console.printf("Pending changes: %u (type 'diff' to list details)\n", static_cast<unsigned>(pending));
+    console.println(F("Quick edit: <token>=<value> or <token> <value>  (e.g. lma_pwm=32, rc1 15)"));
+    console.println(F("Number keys open grouped editors:"));
+    console.println(F(" 1) Left driver      2) Right driver       3) Lights/Speaker/Battery"));
+    console.println(F(" 4) Slave link       5) RC receiver pins   6) IO port expander"));
+    console.println(F(" 7) PCA9685 address  8) PCF8575 address    9) Finish wizard"));
+    console.println(F(" Type 0/exit to cancel without applying. '?' for help."));
+    console.println(F(" Tip: fl_*/fr_*/rl_*/rr_* tokens edit color channels without opening option 6 (IO port expander)."));
+}
+
+void configureLighting(Config::LightingConfig& lighting);
+void printIoPortTokenHelp() {
+    console.println(F("IO port tokens:"));
+    console.println(F("  pca_addr, pca_freq"));
+    console.println(F("  fl_r, fl_g, fl_b  (front left RGB)"));
+    console.println(F("  fr_r, fr_g, fr_b  (front right RGB)"));
+    console.println(F("  rl_r, rl_g, rl_b  (rear left RGB)"));
+    console.println(F("  rr_r, rr_g, rr_b  (rear right RGB)"));
+    console.println(F("Use '<token>=<value>' for one-shot edits or type a token for guided input."));
+    console.println(F("Type 'advanced' to run the legacy lighting wizard (blink settings)."));
+}
+
+void editIoPortExpander(Config::RuntimeConfig& config, std::vector<PinWizardBinding>& bindings) {
+    console.println(F("IO port expander editor. Type '?' for token help, 'done' to return."));
+    bool exitRequested = false;
+    while (!exitRequested && !wizardAbortRequested_) {
+        renderIoPortExpanderSummary(config);
+        console.print(F("IO command (? for help, done to exit): "));
+        String line = readLineBlocking();
+        if (wizardAbortRequested_) {
+            break;
+        }
+        line.trim();
+        if (line.isEmpty()) {
+            continue;
+        }
+        String lower = line;
+        lower.toLowerCase();
+
+        if (lower == "done" || lower == "exit" || lower == "back" || lower == "finish") {
+            exitRequested = true;
+            break;
+        }
+        if (lower == "diff") {
+            printSessionPinDiff(bindings);
+            continue;
+        }
+        if (lower == "?" || lower == "help" || lower == "tokens") {
+            printIoPortTokenHelp();
+            continue;
+        }
+        if (lower == "advanced" || lower == "legacy" || lower == "full") {
+            configureLighting(config.lighting);
+            continue;
+        }
+
+        int eq = line.indexOf('=');
+        int space = line.indexOf(' ');
+        int split = -1;
+        if (eq >= 0 && (space < 0 || eq < space)) {
+            split = eq;
+        } else if (space >= 0) {
+            split = space;
+        }
+
+        if (split > 0) {
+            String token = line.substring(0, split);
+            token.trim();
+            token.toLowerCase();
+            String valueStr = line.substring(split + 1);
+            valueStr.trim();
+            if (token.isEmpty() || valueStr.isEmpty()) {
+                console.println(F("Use <token>=<value> format or just type the token name."));
+                continue;
+            }
+            if (!isLightingTokenName(token)) {
+                console.println(F("Token not part of the IO expander. Try pca_addr or fl_*/fr_*/rl_*/rr_*."));
+                continue;
+            }
+            const PinWizardBinding* binding = findPinWizardBinding(bindings, token);
+            if (!binding) {
+                console.println(F("Token unavailable in this session."));
+                continue;
+            }
+            int parsed = 0;
+            bool ok = binding->allowPcf ? parsePinValue(valueStr, parsed) : parseIntStrict(valueStr, parsed);
+            if (!ok) {
+                console.println(F("Invalid value. Use decimal channel numbers (0-15) or -1 to disable."));
+                continue;
+            }
+            if (readBindingValue(*binding) == parsed) {
+                console.println(F("Value unchanged."));
+                continue;
+            }
+            writeBindingValue(*binding, parsed);
+            console.printf("%s updated to %d\n", binding->label.c_str(), parsed);
+            continue;
+        }
+
+        if (!isLightingTokenName(lower)) {
+            console.println(F("Unknown token. Type '?' to see valid IO port tokens."));
+            continue;
+        }
+
+        const PinWizardBinding* binding = findPinWizardBinding(bindings, lower);
+        if (!binding) {
+            console.println(F("Token unavailable in this session."));
+            continue;
+        }
+        const int current = readBindingValue(*binding);
+        const int updated = promptInt(binding->label, current);
+        if (wizardAbortRequested_) {
+            break;
+        }
+        if (updated == current) {
+            console.println(F("Value unchanged."));
+            continue;
+        }
+        writeBindingValue(*binding, updated);
+        console.println(F("Value updated."));
+    }
+
+    if (!wizardAbortRequested_) {
+        console.println(F("Leaving IO port expander editor."));
+    }
+}
+
+void printPinWizardHelp() {
+    console.println(F("Pin wizard controls:"));
+    console.println(F("  - Type <token>=<value> for quick edits (pcf# for expander pins)."));
+    console.println(F("  - Type a token alone to see its current value."));
+    console.println(F("  - Press 1-8 to open the legacy guided forms for grouped settings."));
+    console.println(F("  - PCA9685 tokens: pca_addr, pca_freq, fl_*/fr_*/rl_*/rr_* for color channels."));
+    console.println(F("  - Option 6 opens the IO port expander; type 'advanced' there for blink settings."));
+    console.println(F("  - 'diff' lists changes relative to when the wizard opened."));
+    console.println(F("  - '9' or 'done' finishes and prompts to apply, '0'/'exit' discards changes."));
+}
+
 void configureRgbChannel(const char* label, Config::RgbChannel& rgb) {
     console.println(label);
     rgb.r = promptInt("  Red channel", rgb.r);
@@ -881,62 +1411,89 @@ void runPinWizard() {
 
     beginWizardSession();
 
-    Config::RuntimeConfig temp = *ctx_.config;
-    console.println(F("Pin assignment wizard. Edit individual sections or exit when finished."));
+    Config::RuntimeConfig baseline = *ctx_.config;
+    Config::RuntimeConfig temp = baseline;
+    auto bindings = buildPinWizardBindings(temp, baseline);
 
-    bool exitRequested = false;
-    while (!exitRequested && !wizardAbortRequested_) {
-        showPinSummary(temp);
-        console.println(F("-----------------------------"));
-        console.println(F("1) Edit left driver"));
-        console.println(F("2) Edit right driver"));
-        console.println(F("3) Edit light/speaker/battery pins"));
-        console.println(F("4) Edit slave link TX/RX"));
-        console.println(F("5) Edit RC receiver pins"));
-        console.println(F("6) Edit lighting config"));
-        console.println(F("7) Edit PCA9685 address"));
-        console.println(F("8) Edit PCF8575 address"));
-        console.println(F("9) Finish wizard"));
-        console.println(F("0) Exit without finish"));
-        const int choice = promptInt("Select option", 9);
+    console.println(F("Pin assignment wizard. Interactive dashboard + quick-edit tokens."));
+    console.println(F("Type '?' for help, 'done' when finished, or '0' to cancel."));
+
+    bool finishRequested = false;
+    bool discardRequested = false;
+    while (!finishRequested && !discardRequested && !wizardAbortRequested_) {
+        renderPinWizardDashboard(temp, bindings);
+        console.print(F("Command (? for help): "));
+        String line = readLineBlocking();
         if (wizardAbortRequested_) {
             break;
         }
-        switch (choice) {
-            case 1:
-                editDriverPins("Left Driver", temp.pins.leftDriver);
-                break;
-            case 2:
-                editDriverPins("Right Driver", temp.pins.rightDriver);
-                break;
-            case 3:
-                editPeripheralPins(temp.pins);
-                break;
-            case 4:
-                editSlaveLinkPins(temp.pins);
-                break;
-            case 5:
-                configureRcPins(temp.rc);
-                break;
-            case 6:
-                configureLighting(temp.lighting);
-                break;
-            case 7:
-                editPcaAddress(temp.lighting);
-                break;
-            case 8:
-                editPcfAddress(temp.pins);
-                break;
-            case 0:
-                exitRequested = true;
-                break;
-            case 9:
-                exitRequested = true;
-                break;
-            default:
-                console.println(F("Invalid selection."));
-                break;
+        line.trim();
+        if (line.isEmpty()) {
+            continue;
         }
+
+        String lower = line;
+        lower.toLowerCase();
+
+        if (lower == "?" || lower == "help") {
+            printPinWizardHelp();
+            continue;
+        }
+        if (lower == "diff") {
+            printSessionPinDiff(bindings);
+            continue;
+        }
+        if (lower == "done" || lower == "finish" || lower == "apply" || lower == "9") {
+            finishRequested = true;
+            break;
+        }
+        if (lower == "0" || lower == "exit" || lower == "cancel" || lower == "quit" || lower == "q") {
+            discardRequested = true;
+            break;
+        }
+
+        bool sectionHandled = false;
+        if (lower == "1" || lower == "left" || lower == "left driver") {
+            editDriverPins("Left Driver", temp.pins.leftDriver);
+            sectionHandled = true;
+        } else if (lower == "2" || lower == "right" || lower == "right driver") {
+            editDriverPins("Right Driver", temp.pins.rightDriver);
+            sectionHandled = true;
+        } else if (lower == "3" || lower == "peripheral" || lower == "peripherals" || lower == "lights") {
+            editPeripheralPins(temp.pins);
+            sectionHandled = true;
+        } else if (lower == "4" || lower == "slave" || lower == "link") {
+            editSlaveLinkPins(temp.pins);
+            sectionHandled = true;
+        } else if (lower == "5" || lower == "rc" || lower == "receiver") {
+            configureRcPins(temp.rc);
+            sectionHandled = true;
+        } else if (lower == "6" || lower == "lighting" || lower == "io" || lower == "expander" || lower == "io port") {
+            editIoPortExpander(temp, bindings);
+            sectionHandled = true;
+        } else if (lower == "7" || lower == "pca") {
+            editPcaAddress(temp.lighting);
+            sectionHandled = true;
+        } else if (lower == "8" || lower == "pcf") {
+            editPcfAddress(temp.pins);
+            sectionHandled = true;
+        }
+
+        if (wizardAbortRequested_) {
+            break;
+        }
+        if (sectionHandled) {
+            continue;
+        }
+
+        if (tryHandleQuickPinEdit(line, bindings)) {
+            continue;
+        }
+        if (tryShowPinBindingValue(line, bindings)) {
+            continue;
+        }
+
+        console.println(F("Unknown command. Use '?' for help or <token>=<value> to edit a pin."));
     }
 
     bool aborted = wizardAbortRequested_;
@@ -944,9 +1501,28 @@ void runPinWizard() {
         wizardAbortRequested_ = false;
     }
 
-    bool apply = false;
-    if (!aborted) {
-        apply = promptBool("Apply these changes?", true);
+    if (aborted) {
+        console.println(F("Pin wizard cancelled."));
+        finishWizardSession();
+        return;
+    }
+    if (discardRequested) {
+        console.println(F("Pin changes discarded."));
+        finishWizardSession();
+        return;
+    }
+    if (!finishRequested) {
+        console.println(F("Pin changes discarded."));
+        finishWizardSession();
+        return;
+    }
+
+    const bool apply = promptBool("Apply these changes?", true);
+    if (wizardAbortRequested_) {
+        console.println(F("Pin wizard cancelled."));
+        wizardAbortRequested_ = false;
+        finishWizardSession();
+        return;
     }
     if (apply) {
         *ctx_.config = temp;
@@ -1084,18 +1660,263 @@ void runTestWizard() {
     finishWizardSession();
 }
 
+bool saveConfigToStore() {
+    if (ctx_.store && ctx_.config && ctx_.store->save(*ctx_.config)) {
+        console.println(F("Settings saved."));
+        snapshotBaseline();
+        return true;
+    }
+    console.println(F("Failed to save settings."));
+    return false;
+}
+
+bool loadConfigFromStore() {
+    if (!ctx_.store || !ctx_.config) {
+        console.println(F("Storage unavailable."));
+        return false;
+    }
+    if (ctx_.store->load(*ctx_.config)) {
+        console.println(F("Settings loaded."));
+    } else {
+        console.println(F("Loaded defaults (no saved data)."));
+    }
+    if (applyCallback_) {
+        applyCallback_();
+    }
+    snapshotBaseline();
+    return true;
+}
+
+bool restoreDefaultConfig() {
+    if (!ctx_.config) {
+        console.println(F("Config unavailable."));
+        return false;
+    }
+    *ctx_.config = Config::makeDefaultConfig();
+    if (applyCallback_) {
+        applyCallback_();
+    }
+    console.println(F("Restored defaults. Run 'save' to persist."));
+    return true;
+}
+
+bool resetStoredConfig() {
+    if (!ctx_.store) {
+        console.println(F("Storage unavailable."));
+        return false;
+    }
+    ctx_.store->reset();
+    console.println(F("Cleared saved settings."));
+    return true;
+}
+
+void runStorageMenu() {
+    beginWizardSession();
+    bool exit = false;
+    while (!exit && !wizardAbortRequested_) {
+        console.println();
+        console.println(F("=== Storage & Defaults ==="));
+        console.println(F("1) Save current settings"));
+        console.println(F("2) Load saved settings"));
+        console.println(F("3) Restore factory defaults"));
+        console.println(F("4) Clear saved data"));
+        console.println(F("0) Back"));
+        const int choice = promptInt("Select option", 0);
+        if (wizardAbortRequested_) {
+            break;
+        }
+        switch (choice) {
+            case 1:
+                saveConfigToStore();
+                break;
+            case 2:
+                loadConfigFromStore();
+                break;
+            case 3:
+                restoreDefaultConfig();
+                break;
+            case 4:
+                resetStoredConfig();
+                break;
+            case 0:
+                exit = true;
+                break;
+            default:
+                console.println(F("Unknown selection."));
+                break;
+        }
+    }
+    finishWizardSession();
+}
+
+void runHardwareMenu() {
+    beginWizardSession();
+    bool exit = false;
+    while (!exit && !wizardAbortRequested_) {
+        console.println();
+        console.println(F("=== Hardware & Pins ==="));
+        console.println(F("1) View pin summary"));
+        console.println(F("2) Edit pin mapping"));
+        console.println(F("0) Back"));
+        const int choice = promptInt("Select option", 0);
+        if (wizardAbortRequested_) {
+            break;
+        }
+        switch (choice) {
+            case 1:
+                if (ctx_.config) {
+                    showPinSummary(*ctx_.config);
+                } else {
+                    console.println(F("Config unavailable."));
+                }
+                break;
+            case 2:
+                finishWizardSession();
+                runPinWizard();
+                beginWizardSession();
+                break;
+            case 0:
+                exit = true;
+                break;
+            default:
+                console.println(F("Unknown selection."));
+                break;
+        }
+    }
+    finishWizardSession();
+}
+
+void runConfigMenu() {
+    beginWizardSession();
+    bool exit = false;
+    while (!exit && !wizardAbortRequested_) {
+        console.println();
+        console.println(F("=== Config & Network ==="));
+        console.println(F("1) View configuration"));
+        console.println(F("2) Feature toggles"));
+        console.println(F("3) Wi-Fi / network"));
+        console.println(F("0) Back"));
+        const int choice = promptInt("Select option", 0);
+        if (wizardAbortRequested_) {
+            break;
+        }
+        switch (choice) {
+            case 1:
+                showConfig();
+                break;
+            case 2:
+                finishWizardSession();
+                runFeatureWizard();
+                beginWizardSession();
+                break;
+            case 3:
+                finishWizardSession();
+                runWifiWizard();
+                beginWizardSession();
+                break;
+            case 0:
+                exit = true;
+                break;
+            default:
+                console.println(F("Unknown selection."));
+                break;
+        }
+    }
+    finishWizardSession();
+}
+
+void runDiagMenu() {
+    beginWizardSession();
+    bool exit = false;
+    while (!exit && !wizardAbortRequested_) {
+        console.println();
+        console.println(F("=== Diagnostics & Tests ==="));
+        console.println(F("1) Run test wizard"));
+        console.println(F("0) Back"));
+        const int choice = promptInt("Select option", 0);
+        if (wizardAbortRequested_) {
+            break;
+        }
+        switch (choice) {
+            case 1:
+                finishWizardSession();
+                runTestWizard();
+                beginWizardSession();
+                break;
+            case 0:
+                exit = true;
+                break;
+            default:
+                console.println(F("Unknown selection."));
+                break;
+        }
+    }
+    finishWizardSession();
+}
+
+void runMainMenu() {
+    beginWizardSession();
+    bool done = false;
+    while (!done && !wizardAbortRequested_) {
+        console.println();
+        console.println(F("===== TankRC Console ====="));
+        console.println(F("1) Hardware & pins"));
+        console.println(F("2) Config & network"));
+        console.println(F("3) Diagnostics"));
+        console.println(F("4) Storage & maintenance"));
+        console.println(F("0) Exit"));
+        const int choice = promptInt("Select option", 0);
+        if (wizardAbortRequested_) {
+            break;
+        }
+        switch (choice) {
+            case 1:
+                finishWizardSession();
+                runHardwareMenu();
+                beginWizardSession();
+                break;
+            case 2:
+                finishWizardSession();
+                runConfigMenu();
+                beginWizardSession();
+                break;
+            case 3:
+                finishWizardSession();
+                runDiagMenu();
+                beginWizardSession();
+                break;
+            case 4:
+                finishWizardSession();
+                runStorageMenu();
+                beginWizardSession();
+                break;
+            case 0:
+                done = true;
+                break;
+            default:
+                console.println(F("Unknown selection."));
+                break;
+        }
+    }
+    finishWizardSession();
+}
+
 void handleCommand(String line) {
     line.trim();
     if (line.isEmpty()) {
-        showHelp();
+        runMainMenu();
         return;
     }
 
     String lower = line;
     lower.toLowerCase();
 
-    if (lower == "help" || lower == "menu") {
+    if (lower == "help") {
         runHelpMenu();
+        return;
+    }
+    if (lower == "menu" || lower == "main") {
+        runMainMenu();
         return;
     }
     if (lower == "h" || lower == "?") {
@@ -1132,47 +1953,19 @@ void handleCommand(String line) {
         return;
     }
     if (lower == "save" || lower == "sv") {
-        if (ctx_.store && ctx_.config && ctx_.store->save(*ctx_.config)) {
-            console.println(F("Settings saved."));
-            snapshotBaseline();
-        } else {
-            console.println(F("Failed to save settings."));
-        }
+        saveConfigToStore();
         return;
     }
     if (lower == "load" || lower == "ld") {
-        if (ctx_.store && ctx_.config) {
-            if (ctx_.store->load(*ctx_.config)) {
-                console.println(F("Settings loaded."));
-            } else {
-                console.println(F("Loaded defaults (no saved data)."));
-            }
-            if (applyCallback_) {
-                applyCallback_();
-            }
-            snapshotBaseline();
-        } else {
-            console.println(F("Storage unavailable."));
-        }
+        loadConfigFromStore();
         return;
     }
     if (lower == "defaults" || lower == "df") {
-        if (ctx_.config) {
-            *ctx_.config = Config::makeDefaultConfig();
-            if (applyCallback_) {
-                applyCallback_();
-            }
-            console.println(F("Restored defaults. Run 'save' to persist."));
-        } else {
-            console.println(F("Config unavailable."));
-        }
+        restoreDefaultConfig();
         return;
     }
     if (lower == "reset" || lower == "rs") {
-        if (ctx_.store) {
-            ctx_.store->reset();
-            console.println(F("Cleared saved settings."));
-        }
+        resetStoredConfig();
         return;
     }
 
@@ -1211,7 +2004,7 @@ void begin(const Context& ctx, ApplyConfigCallback applyCallback) {
 void update() {
     if (!promptShown_) {
         console.println();
-        console.println(F("[TankRC] Serial console ready. Type 'help' for the interactive hub."));
+        console.println(F("[TankRC] Serial console ready. Type 'menu' for the dashboard or 'help' for shortcuts."));
         console.printPrompt();
         promptShown_ = true;
     }
