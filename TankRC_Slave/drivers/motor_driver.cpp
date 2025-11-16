@@ -4,26 +4,35 @@
 #include "drivers/motor_driver.h"
 
 namespace TankRC::Drivers {
-void MotorDriver::attach(const ChannelPins& motorA, const ChannelPins& motorB, int standbyPin) {
+void MotorDriver::attach(const ChannelPins& motorA, const ChannelPins& motorB, int standbyPin, Pcf8575* expander) {
     motorA_ = motorA;
     motorB_ = motorB;
     standbyPin_ = standbyPin;
+    expander_ = expander;
+
+    auto setupPin = [](int pin) {
+        if (pin >= 0) {
+            pinMode(pin, OUTPUT);
+        }
+    };
 
     if (motorA_.valid()) {
-        pinMode(motorA_.pwm, OUTPUT);
-        pinMode(motorA_.in1, OUTPUT);
-        pinMode(motorA_.in2, OUTPUT);
+        setupPin(motorA_.pwm);
+        setupPin(motorA_.in1);
+        setupPin(motorA_.in2);
     }
 
     if (motorB_.valid()) {
-        pinMode(motorB_.pwm, OUTPUT);
-        pinMode(motorB_.in1, OUTPUT);
-        pinMode(motorB_.in2, OUTPUT);
+        setupPin(motorB_.pwm);
+        setupPin(motorB_.in1);
+        setupPin(motorB_.in2);
     }
 
     if (standbyPin_ >= 0) {
         pinMode(standbyPin_, OUTPUT);
         digitalWrite(standbyPin_, HIGH);
+    } else if (Config::isPcfPin(standbyPin_)) {
+        writeDigital(standbyPin_, true);
     }
 
     stop();
@@ -71,15 +80,30 @@ void MotorDriver::driveChannel(const ChannelPins& pins, float percent) const {
     const float magnitude = fabsf(output);
 
     if (magnitude <= 0.001F) {
-        digitalWrite(pins.in1, LOW);
-        digitalWrite(pins.in2, LOW);
-        analogWrite(pins.pwm, 0);
+        writeDigital(pins.in1, false);
+        writeDigital(pins.in2, false);
+        if (pins.pwm >= 0) {
+            analogWrite(pins.pwm, 0);
+        }
         return;
     }
 
     const bool forward = output > 0.0F;
-    digitalWrite(pins.in1, forward ? HIGH : LOW);
-    digitalWrite(pins.in2, forward ? LOW : HIGH);
-    analogWrite(pins.pwm, static_cast<int>(magnitude * 255.0F));
+    writeDigital(pins.in1, forward);
+    writeDigital(pins.in2, !forward);
+    if (pins.pwm >= 0) {
+        analogWrite(pins.pwm, static_cast<int>(magnitude * 255.0F));
+    }
+}
+
+void MotorDriver::writeDigital(int pin, bool high) const {
+    if (pin < 0) {
+        if (Config::isPcfPin(pin) && expander_) {
+            const int idx = Config::pcfIndexFromPin(pin);
+            expander_->writePin(idx, high);
+        }
+        return;
+    }
+    digitalWrite(pin, high ? HIGH : LOW);
 }
 }  // namespace TankRC::Drivers

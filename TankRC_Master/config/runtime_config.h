@@ -29,6 +29,7 @@ struct PinAssignments {
     int batterySense = -1;
     int slaveTx = -1;
     int slaveRx = -1;
+    int pcfAddress = 0x20;
 };
 
 struct FeatureConfig {
@@ -102,5 +103,17 @@ struct RuntimeConfig {
 
 RuntimeConfig makeDefaultConfig();
 bool migrateConfig(RuntimeConfig& config, std::uint32_t fromVersion);
+
+inline bool isPcfPin(int pin) {
+    return pin <= -2;
+}
+
+inline int pcfIndexFromPin(int pin) {
+    return isPcfPin(pin) ? (-pin - 2) : -1;
+}
+
+inline int pinFromPcfIndex(int index) {
+    return (index >= 0 && index < 16) ? -(index + 2) : -1;
+}
 }  // namespace TankRC::Config
 #endif  // TANKRC_CONFIG_RUNTIME_CONFIG_H

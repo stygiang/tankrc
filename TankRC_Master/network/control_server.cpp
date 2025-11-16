@@ -1001,6 +1001,13 @@ void ControlServer::handleConfigImport() {
                     changed = true;
                     return true;
                 }
+                if (pinKey == "pcfAddress") {
+                    int value = 0;
+                    if (!parser.parseInt(value)) return false;
+                    config_->pins.pcfAddress = value;
+                    changed = true;
+                    return true;
+                }
                 return parser.skipValue();
             });
         }
@@ -1306,7 +1313,8 @@ String ControlServer::buildConfigJson(bool includeSensitive) const {
     json += "},";
     json += "\"lightBar\":" + String(config_->pins.lightBar) + ",";
     json += "\"speaker\":" + String(config_->pins.speaker) + ",";
-    json += "\"batterySense\":" + String(config_->pins.batterySense);
+    json += "\"batterySense\":" + String(config_->pins.batterySense) + ",";
+    json += "\"pcfAddress\":" + String(config_->pins.pcfAddress);
     json += "},";
 
     json += "\"rcPins\":[";

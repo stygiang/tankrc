@@ -6,18 +6,22 @@
 #include "config/settings.h"
 #include "drivers/battery_monitor.h"
 #include "drivers/motor_driver.h"
+#include "drivers/pcf8575.h"
 
 namespace TankRC::Hal {
 namespace {
 Drivers::MotorDriver leftMotor;
 Drivers::MotorDriver rightMotor;
 Drivers::BatteryMonitor battery;
+Drivers::Pcf8575 pinExpander;
 #if FEATURE_LIGHTS
 Features::Lighting lighting;
 #endif
 
 Config::RuntimeConfig currentConfig{};
 bool motorsReady = false;
+bool expanderReady = false;
+int currentExpanderAddress = 0x20;
 #if FEATURE_LIGHTS
 bool lightingReady = false;
 #endif
@@ -28,10 +32,31 @@ Drivers::ChannelPins makeChannel(const Config::ChannelPins& pins) {
     return Drivers::ChannelPins{pins.pwm, pins.in1, pins.in2};
 }
 
+bool driverUsesExpander(const Config::DriverPins& pins) {
+    auto channelNeeds = [](const Config::ChannelPins& ch) {
+        return Config::isPcfPin(ch.in1) || Config::isPcfPin(ch.in2);
+    };
+    return channelNeeds(pins.motorA) || channelNeeds(pins.motorB) || Config::isPcfPin(pins.standby);
+}
+
+void ensureExpander(const Config::RuntimeConfig& config) {
+    const bool needed = driverUsesExpander(config.pins.leftDriver) || driverUsesExpander(config.pins.rightDriver);
+    if (!needed) {
+        expanderReady = false;
+        return;
+    }
+    if (!expanderReady || currentExpanderAddress != config.pins.pcfAddress) {
+        currentExpanderAddress = config.pins.pcfAddress;
+        expanderReady = pinExpander.begin(static_cast<std::uint8_t>(config.pins.pcfAddress));
+    }
+}
+
 void configureMotors(const Config::RuntimeConfig& config) {
+    ensureExpander(config);
+    Drivers::Pcf8575* expander = expanderReady ? &pinExpander : nullptr;
     const auto& pins = config.pins;
-    leftMotor.attach(makeChannel(pins.leftDriver.motorA), makeChannel(pins.leftDriver.motorB), pins.leftDriver.standby);
-    rightMotor.attach(makeChannel(pins.rightDriver.motorA), makeChannel(pins.rightDriver.motorB), pins.rightDriver.standby);
+    leftMotor.attach(makeChannel(pins.leftDriver.motorA), makeChannel(pins.leftDriver.motorB), pins.leftDriver.standby, expander);
+    rightMotor.attach(makeChannel(pins.rightDriver.motorA), makeChannel(pins.rightDriver.motorB), pins.rightDriver.standby, expander);
     const float ramp = Settings::motorDynamics.rampRate <= 0.0F ? 1.0F : Settings::motorDynamics.rampRate;
     leftMotor.setRampRate(ramp);
     rightMotor.setRampRate(ramp);

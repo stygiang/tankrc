@@ -23,6 +23,7 @@ RuntimeConfig makeDefaultConfig() {
     config.pins.batterySense = Pins::BATTERY_SENSE;
     config.pins.slaveTx = Pins::SLAVE_UART_TX;
     config.pins.slaveRx = Pins::SLAVE_UART_RX;
+    config.pins.pcfAddress = 0x20;
 
     config.features.lightsEnabled = FEATURE_LIGHTS != 0;
     config.features.soundEnabled = FEATURE_SOUND != 0;
@@ -73,6 +74,8 @@ constexpr int kMinGpio = -1;
 constexpr int kMaxGpio = 39;
 constexpr int kMinPcaChannel = -1;
 constexpr int kMaxPcaChannel = 15;
+constexpr int kMinPcfAddress = 0x20;
+constexpr int kMaxPcfAddress = 0x27;
 
 int clampGpio(int pin) {
     if (pin < kMinGpio || pin > kMaxGpio) {
@@ -185,6 +188,10 @@ bool migrateConfig(RuntimeConfig& config, std::uint32_t fromVersion) {
     changed |= normalizeGpio(config.pins.batterySense, defaults.pins.batterySense);
     changed |= normalizeGpio(config.pins.slaveTx, defaults.pins.slaveTx);
     changed |= normalizeGpio(config.pins.slaveRx, defaults.pins.slaveRx);
+    if (config.pins.pcfAddress < kMinPcfAddress || config.pins.pcfAddress > kMaxPcfAddress) {
+        config.pins.pcfAddress = defaults.pins.pcfAddress;
+        changed = true;
+    }
 
     for (std::size_t i = 0; i < std::size(config.rc.channelPins); ++i) {
         changed |= normalizeGpio(config.rc.channelPins[i], defaults.rc.channelPins[i]);

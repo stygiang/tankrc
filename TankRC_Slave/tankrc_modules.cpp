@@ -9,6 +9,7 @@
 #include "drivers/battery_monitor.cpp"
 #include "drivers/motor_driver.cpp"
 #include "drivers/pca9685.cpp"
+#include "drivers/pcf8575.cpp"
 #include "features/lighting.cpp"
 #include "hal/hal.cpp"
 #include "health/health.cpp"

@@ -21,6 +21,7 @@ RuntimeConfig makeDefaultConfig() {
     config.pins.batterySense = Pins::BATTERY_SENSE;
     config.pins.slaveTx = Pins::SLAVE_UART_TX;
     config.pins.slaveRx = Pins::SLAVE_UART_RX;
+    config.pins.pcfAddress = 0x20;
 
     config.features.lightsEnabled = FEATURE_LIGHTS != 0;
     config.features.soundEnabled = FEATURE_SOUND != 0;

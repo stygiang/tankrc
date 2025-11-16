@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdarg>
+#include <cctype>
 #include <iterator>
 #include <vector>
 
@@ -207,6 +208,94 @@ String promptString(const String& label, const String& current, size_t maxLen) {
     return line;
 }
 
+bool parseIntStrict(const String& text, int& value) {
+    if (text.isEmpty()) {
+        return false;
+    }
+    int start = 0;
+    if (text[start] == '-' || text[start] == '+') {
+        ++start;
+    }
+    if (start >= text.length()) {
+        return false;
+    }
+    for (int i = start; i < text.length(); ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(text[i]))) {
+            return false;
+        }
+    }
+    value = text.toInt();
+    return true;
+}
+
+String formatPinValue(int pin) {
+    if (pin == -1) {
+        return String(F("none"));
+    }
+    const int idx = Config::pcfIndexFromPin(pin);
+    if (idx >= 0) {
+        return String(F("pcf")) + String(idx);
+    }
+    return String(pin);
+}
+
+bool parsePinValue(const String& text, int& outPin) {
+    if (text.isEmpty()) {
+        return false;
+    }
+    String lower = text;
+    lower.trim();
+    lower.toLowerCase();
+    if (lower == "none" || lower == "off") {
+        outPin = -1;
+        return true;
+    }
+    if (lower.startsWith("pcf")) {
+        String suffix = lower.substring(3);
+        suffix.trim();
+        int idx = 0;
+        if (!parseIntStrict(suffix, idx)) {
+            return false;
+        }
+        if (idx < 0 || idx >= 16) {
+            return false;
+        }
+        outPin = Config::pinFromPcfIndex(idx);
+        return true;
+    }
+    int value = 0;
+    if (!parseIntStrict(lower, value)) {
+        return false;
+    }
+    outPin = value;
+    return true;
+}
+
+int promptPinValue(const String& label, int current) {
+    while (true) {
+        console.print(label);
+        console.print(" [");
+        console.print(formatPinValue(current));
+        console.print("] : ");
+        String line = readLineBlocking();
+        line.trim();
+        if (line.isEmpty()) {
+            return current;
+        }
+        String lower = line;
+        lower.toLowerCase();
+        if (lower == "q" || lower == "quit" || lower == "exit") {
+            wizardAbortRequested_ = true;
+            return current;
+        }
+        int parsed = current;
+        if (parsePinValue(line, parsed)) {
+            return parsed;
+        }
+        console.println(F("Invalid pin. Use a GPIO number or pcf# (e.g. pcf3)."));
+    }
+}
+
 struct HelpEntry {
     const __FlashStringHelper* command;
     const __FlashStringHelper* description;
@@ -328,16 +417,29 @@ void showConfig() {
     const auto& pins = ctx_.config->pins;
     const auto& features = ctx_.config->features;
     console.println(F("--- Pin Assignments ---"));
-    console.printf("Left Motor A (PWM,IN1,IN2): %d, %d, %d\n", pins.leftDriver.motorA.pwm, pins.leftDriver.motorA.in1, pins.leftDriver.motorA.in2);
-    console.printf("Left Motor B (PWM,IN1,IN2): %d, %d, %d\n", pins.leftDriver.motorB.pwm, pins.leftDriver.motorB.in1, pins.leftDriver.motorB.in2);
-    console.printf("Left Driver STBY: %d\n", pins.leftDriver.standby);
-    console.printf("Right Motor A (PWM,IN1,IN2): %d, %d, %d\n", pins.rightDriver.motorA.pwm, pins.rightDriver.motorA.in1, pins.rightDriver.motorA.in2);
-    console.printf("Right Motor B (PWM,IN1,IN2): %d, %d, %d\n", pins.rightDriver.motorB.pwm, pins.rightDriver.motorB.in1, pins.rightDriver.motorB.in2);
-    console.printf("Right Driver STBY: %d\n", pins.rightDriver.standby);
-    console.printf("Light bar pin: %d\n", pins.lightBar);
-    console.printf("Speaker pin: %d\n", pins.speaker);
-    console.printf("Battery sense pin: %d\n", pins.batterySense);
+    console.printf("Left Motor A (PWM,IN1,IN2): %d, %s, %s\n",
+                  pins.leftDriver.motorA.pwm,
+                  formatPinValue(pins.leftDriver.motorA.in1).c_str(),
+                  formatPinValue(pins.leftDriver.motorA.in2).c_str());
+    console.printf("Left Motor B (PWM,IN1,IN2): %d, %s, %s\n",
+                  pins.leftDriver.motorB.pwm,
+                  formatPinValue(pins.leftDriver.motorB.in1).c_str(),
+                  formatPinValue(pins.leftDriver.motorB.in2).c_str());
+    console.printf("Left Driver STBY: %s\n", formatPinValue(pins.leftDriver.standby).c_str());
+    console.printf("Right Motor A (PWM,IN1,IN2): %d, %s, %s\n",
+                  pins.rightDriver.motorA.pwm,
+                  formatPinValue(pins.rightDriver.motorA.in1).c_str(),
+                  formatPinValue(pins.rightDriver.motorA.in2).c_str());
+    console.printf("Right Motor B (PWM,IN1,IN2): %d, %s, %s\n",
+                  pins.rightDriver.motorB.pwm,
+                  formatPinValue(pins.rightDriver.motorB.in1).c_str(),
+                  formatPinValue(pins.rightDriver.motorB.in2).c_str());
+    console.printf("Right Driver STBY: %s\n", formatPinValue(pins.rightDriver.standby).c_str());
+    console.printf("Light bar pin: %s\n", formatPinValue(pins.lightBar).c_str());
+    console.printf("Speaker pin: %s\n", formatPinValue(pins.speaker).c_str());
+    console.printf("Battery sense pin: %s\n", formatPinValue(pins.batterySense).c_str());
     console.printf("Slave link TX/RX: %d / %d\n", pins.slaveTx, pins.slaveRx);
+    console.printf("PCF8575 address: %d\n", pins.pcfAddress);
 
     console.println(F("--- RC Receiver Pins ---"));
     for (std::size_t i = 0; i < Drivers::RcReceiver::kChannelCount; ++i) {
@@ -423,6 +525,7 @@ static std::vector<PinTokenInfo> collectPinTokens() {
     add("battery", "Battery sense pin", pins.batterySense, basePins ? &bp.batterySense : nullptr);
     add("slave_tx", "Slave link TX pin", pins.slaveTx, basePins ? &bp.slaveTx : nullptr);
     add("slave_rx", "Slave link RX pin", pins.slaveRx, basePins ? &bp.slaveRx : nullptr);
+    add("pcf_addr", "PCF8575 I2C address", pins.pcfAddress, basePins ? &bp.pcfAddress : nullptr);
 
     for (std::size_t i = 0; i < std::size(rc.channelPins); ++i) {
         String name = "rc" + String(i + 1);
@@ -445,7 +548,8 @@ static void printPinList() {
     }
     console.println(F("--- Pin Tokens ---"));
     for (const auto& t : tokens) {
-        console.printf("%-10s = %-4d (%s)\n", t.token.c_str(), *t.value, t.description);
+        const String value = formatPinValue(*t.value);
+        console.printf("%-10s = %-8s (%s)\n", t.token.c_str(), value.c_str(), t.description);
     }
 }
 
@@ -462,7 +566,9 @@ static void printPinDiff() {
                 console.println(F("--- Pin diffs since last save ---"));
                 any = true;
             }
-            console.printf("%-10s: %d -> %d\n", t.token.c_str(), t.baseline, *t.value);
+            const String fromVal = formatPinValue(t.baseline);
+            const String toVal = formatPinValue(*t.value);
+            console.printf("%-10s: %s -> %s\n", t.token.c_str(), fromVal.c_str(), toVal.c_str());
         }
     }
     if (!any) {
@@ -474,9 +580,9 @@ void configureChannel(const char* label, Config::ChannelPins& pins) {
     console.println(label);
     pins.pwm = promptInt("  PWM", pins.pwm);
     if (wizardAbortRequested_) return;
-    pins.in1 = promptInt("  IN1", pins.in1);
+    pins.in1 = promptPinValue("  IN1", pins.in1);
     if (wizardAbortRequested_) return;
-    pins.in2 = promptInt("  IN2", pins.in2);
+    pins.in2 = promptPinValue("  IN2", pins.in2);
 }
 
 void configureRgbChannel(const char* label, Config::RgbChannel& rgb) {
@@ -623,7 +729,9 @@ void handlePinCommand(const String& args) {
         console.println(F("  rma_pwm,rma_in1,rma_in2"));
         console.println(F("  rmb_pwm,rmb_in1,rmb_in2"));
         console.println(F("  left_stby,right_stby,lightbar,speaker,battery,slave_tx,slave_rx"));
+        console.println(F("  pcf_addr (PCF8575 I2C address)"));
         console.println(F("  rc1,rc2,rc3,rc4,rc5,rc6"));
+        console.println(F("  Use values like 'pcf3' or 'none' for expander pins"));
         console.println(F("  list  (show all pins)"));
         console.println(F("  diff  (show pins changed since last save)"));
         return;
@@ -641,37 +749,46 @@ void handlePinCommand(const String& args) {
     struct Binding {
         const char* name;
         int* ptr;
+        bool allowPcf;
     };
     Binding bindings[] = {
-        {"lma_pwm", &pins.leftDriver.motorA.pwm},
-        {"lma_in1", &pins.leftDriver.motorA.in1},
-        {"lma_in2", &pins.leftDriver.motorA.in2},
-        {"lmb_pwm", &pins.leftDriver.motorB.pwm},
-        {"lmb_in1", &pins.leftDriver.motorB.in1},
-        {"lmb_in2", &pins.leftDriver.motorB.in2},
-        {"rma_pwm", &pins.rightDriver.motorA.pwm},
-        {"rma_in1", &pins.rightDriver.motorA.in1},
-        {"rma_in2", &pins.rightDriver.motorA.in2},
-        {"rmb_pwm", &pins.rightDriver.motorB.pwm},
-        {"rmb_in1", &pins.rightDriver.motorB.in1},
-        {"rmb_in2", &pins.rightDriver.motorB.in2},
-        {"left_stby", &pins.leftDriver.standby},
-        {"right_stby", &pins.rightDriver.standby},
-        {"lightbar", &pins.lightBar},
-        {"speaker", &pins.speaker},
-        {"battery", &pins.batterySense},
-        {"slave_tx", &pins.slaveTx},
-        {"slave_rx", &pins.slaveRx},
+        {"lma_pwm", &pins.leftDriver.motorA.pwm, false},
+        {"lma_in1", &pins.leftDriver.motorA.in1, true},
+        {"lma_in2", &pins.leftDriver.motorA.in2, true},
+        {"lmb_pwm", &pins.leftDriver.motorB.pwm, false},
+        {"lmb_in1", &pins.leftDriver.motorB.in1, true},
+        {"lmb_in2", &pins.leftDriver.motorB.in2, true},
+        {"rma_pwm", &pins.rightDriver.motorA.pwm, false},
+        {"rma_in1", &pins.rightDriver.motorA.in1, true},
+        {"rma_in2", &pins.rightDriver.motorA.in2, true},
+        {"rmb_pwm", &pins.rightDriver.motorB.pwm, false},
+        {"rmb_in1", &pins.rightDriver.motorB.in1, true},
+        {"rmb_in2", &pins.rightDriver.motorB.in2, true},
+        {"left_stby", &pins.leftDriver.standby, true},
+        {"right_stby", &pins.rightDriver.standby, true},
+        {"lightbar", &pins.lightBar, true},
+        {"speaker", &pins.speaker, true},
+        {"battery", &pins.batterySense, true},
+        {"slave_tx", &pins.slaveTx, false},
+        {"slave_rx", &pins.slaveRx, false},
+        {"pcf_addr", &pins.pcfAddress, false},
     };
 
     for (const auto& binding : bindings) {
         if (token == binding.name) {
             if (valueStr.isEmpty()) {
-                console.printf("%s = %d\n", binding.name, *binding.ptr);
+                const String value = binding.allowPcf ? formatPinValue(*binding.ptr) : String(*binding.ptr);
+                console.printf("%s = %s\n", binding.name, value.c_str());
             } else {
-                const int value = valueStr.toInt();
-                *binding.ptr = value;
-                console.printf("%s set to %d\n", binding.name, value);
+                int parsed = 0;
+                bool ok = binding.allowPcf ? parsePinValue(valueStr, parsed) : parseIntStrict(valueStr, parsed);
+                if (!ok) {
+                    console.println(F("Invalid pin value."));
+                    return;
+                }
+                *binding.ptr = parsed;
+                const String value = binding.allowPcf ? formatPinValue(parsed) : String(parsed);
+                console.printf("%s set to %s\n", binding.name, value.c_str());
                 if (applyCallback_) {
                     applyCallback_();
                 }
@@ -718,25 +835,27 @@ void runPinWizard() {
         if (wizardAbortRequested_) { aborted = true; break; }
         configureChannel("Left Driver Motor B", temp.pins.leftDriver.motorB);
         if (wizardAbortRequested_) { aborted = true; break; }
-        temp.pins.leftDriver.standby = promptInt("Left driver STBY", temp.pins.leftDriver.standby);
+        temp.pins.leftDriver.standby = promptPinValue("Left driver STBY", temp.pins.leftDriver.standby);
         if (wizardAbortRequested_) { aborted = true; break; }
 
         configureChannel("Right Driver Motor A", temp.pins.rightDriver.motorA);
         if (wizardAbortRequested_) { aborted = true; break; }
         configureChannel("Right Driver Motor B", temp.pins.rightDriver.motorB);
         if (wizardAbortRequested_) { aborted = true; break; }
-        temp.pins.rightDriver.standby = promptInt("Right driver STBY", temp.pins.rightDriver.standby);
+        temp.pins.rightDriver.standby = promptPinValue("Right driver STBY", temp.pins.rightDriver.standby);
         if (wizardAbortRequested_) { aborted = true; break; }
 
-        temp.pins.lightBar = promptInt("Light bar pin", temp.pins.lightBar);
+        temp.pins.lightBar = promptPinValue("Light bar pin", temp.pins.lightBar);
         if (wizardAbortRequested_) { aborted = true; break; }
-        temp.pins.speaker = promptInt("Speaker pin", temp.pins.speaker);
+        temp.pins.speaker = promptPinValue("Speaker pin", temp.pins.speaker);
         if (wizardAbortRequested_) { aborted = true; break; }
-        temp.pins.batterySense = promptInt("Battery sense pin", temp.pins.batterySense);
+        temp.pins.batterySense = promptPinValue("Battery sense pin", temp.pins.batterySense);
         if (wizardAbortRequested_) { aborted = true; break; }
         temp.pins.slaveTx = promptInt("Slave link TX pin", temp.pins.slaveTx);
         if (wizardAbortRequested_) { aborted = true; break; }
         temp.pins.slaveRx = promptInt("Slave link RX pin", temp.pins.slaveRx);
+        if (wizardAbortRequested_) { aborted = true; break; }
+        temp.pins.pcfAddress = promptInt("PCF8575 I2C address (decimal)", temp.pins.pcfAddress);
         if (wizardAbortRequested_) { aborted = true; break; }
         configureRcPins(temp.rc);
         if (wizardAbortRequested_) { aborted = true; break; }
