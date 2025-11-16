@@ -3,27 +3,52 @@
 
 #include "drivers/motor_driver.h"
 
+#include "drivers/io_expander.h"
+
 namespace TankRC::Drivers {
-void MotorDriver::attach(const ChannelPins& motorA, const ChannelPins& motorB, int standbyPin) {
+namespace {
+void configurePin(const DigitalPin& pin, IoExpander* expander) {
+    switch (pin.source) {
+        case PinSource::Gpio:
+            if (pin.gpio >= 0) {
+                pinMode(pin.gpio, OUTPUT);
+            }
+            break;
+        case PinSource::IoExpander:
+            if (expander && pin.valid()) {
+                expander->pinMode(pin.expanderPin, true);
+            }
+            break;
+        default:
+            break;
+    }
+}
+}  // namespace
+
+void MotorDriver::attach(const ChannelPins& motorA,
+                         const ChannelPins& motorB,
+                         const DigitalPin& standbyPin,
+                         IoExpander* expander) {
     motorA_ = motorA;
     motorB_ = motorB;
     standbyPin_ = standbyPin;
+    expander_ = expander;
 
     if (motorA_.valid()) {
         pinMode(motorA_.pwm, OUTPUT);
-        pinMode(motorA_.in1, OUTPUT);
-        pinMode(motorA_.in2, OUTPUT);
+        configurePin(motorA_.in1, expander_);
+        configurePin(motorA_.in2, expander_);
     }
 
     if (motorB_.valid()) {
         pinMode(motorB_.pwm, OUTPUT);
-        pinMode(motorB_.in1, OUTPUT);
-        pinMode(motorB_.in2, OUTPUT);
+        configurePin(motorB_.in1, expander_);
+        configurePin(motorB_.in2, expander_);
     }
 
-    if (standbyPin_ >= 0) {
-        pinMode(standbyPin_, OUTPUT);
-        digitalWrite(standbyPin_, HIGH);
+    if (standbyPin_.valid()) {
+        configurePin(standbyPin_, expander_);
+        writeDigital(standbyPin_, true);
     }
 
     stop();
@@ -71,15 +96,33 @@ void MotorDriver::driveChannel(const ChannelPins& pins, float percent) const {
     const float magnitude = fabsf(output);
 
     if (magnitude <= 0.001F) {
-        digitalWrite(pins.in1, LOW);
-        digitalWrite(pins.in2, LOW);
+        writeDigital(pins.in1, false);
+        writeDigital(pins.in2, false);
         analogWrite(pins.pwm, 0);
         return;
     }
 
     const bool forward = output > 0.0F;
-    digitalWrite(pins.in1, forward ? HIGH : LOW);
-    digitalWrite(pins.in2, forward ? LOW : HIGH);
+    writeDigital(pins.in1, forward);
+    writeDigital(pins.in2, !forward);
     analogWrite(pins.pwm, static_cast<int>(magnitude * 255.0F));
+}
+
+void MotorDriver::writeDigital(const DigitalPin& pin, bool high) const {
+    if (!pin.valid()) {
+        return;
+    }
+    switch (pin.source) {
+        case PinSource::Gpio:
+            digitalWrite(pin.gpio, high ? HIGH : LOW);
+            break;
+        case PinSource::IoExpander:
+            if (expander_) {
+                expander_->digitalWrite(pin.expanderPin, high);
+            }
+            break;
+        default:
+            break;
+    }
 }
 }  // namespace TankRC::Drivers

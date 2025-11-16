@@ -13,6 +13,33 @@
 namespace TankRC::Network {
 namespace {
 
+String ownedPinToJson(const Config::OwnedPin& pin) {
+    if (pin.owner == Config::PinOwner::IoExpander) {
+        return String(F("{\"owner\":\"io\",\"expanderPin\":")) + String(pin.expanderPin) + "}";
+    }
+    return String(pin.gpio);
+}
+
+bool parseOwnedPinString(const String& text, Config::OwnedPin& pin) {
+    String lower = text;
+    lower.trim();
+    lower.toLowerCase();
+    if (lower.startsWith("io")) {
+        int sep = lower.indexOf(':');
+        String number = sep >= 0 ? lower.substring(sep + 1) : lower.substring(2);
+        number.trim();
+        const int idx = number.toInt();
+        pin.owner = Config::PinOwner::IoExpander;
+        pin.expanderPin = static_cast<std::uint8_t>(std::max(0, idx));
+        pin.gpio = -1;
+        return true;
+    }
+    pin.owner = Config::PinOwner::Slave;
+    pin.gpio = text.toInt();
+    pin.expanderPin = 0;
+    return true;
+}
+
 class JsonStream {
   public:
     explicit JsonStream(const String& input) : data_(input), raw_(data_.c_str()), len_(data_.length()) {}
@@ -241,6 +268,11 @@ class JsonStream {
         return parseNumber(number);
     }
 
+    char peekChar() {
+        skipWhitespace();
+        return peek();
+    }
+
   private:
     void skipWhitespace() {
         while (pos_ < len_ && std::isspace(static_cast<unsigned char>(raw_[pos_]))) {
@@ -287,6 +319,59 @@ class JsonStream {
     size_t len_;
     size_t pos_ = 0;
 };
+
+bool parseOwnedPinNode(JsonStream& parser, Config::OwnedPin& pin) {
+    const char next = parser.peekChar();
+    if (next == '{') {
+        bool ok = parser.parseObject([&](const String& key) {
+            if (key == "owner") {
+                String ownerStr;
+                if (!parser.parseString(ownerStr)) return false;
+                ownerStr.toLowerCase();
+                if (ownerStr == "io" || ownerStr == "expander") {
+                    pin.owner = Config::PinOwner::IoExpander;
+                } else {
+                    pin.owner = Config::PinOwner::Slave;
+                }
+                return true;
+            }
+            if (key == "gpio") {
+                int value = 0;
+                if (!parser.parseInt(value)) return false;
+                pin.gpio = value;
+                return true;
+            }
+            if (key == "expanderPin") {
+                int value = 0;
+                if (!parser.parseInt(value)) return false;
+                pin.expanderPin = static_cast<std::uint8_t>(std::max(0, value));
+                return true;
+            }
+            return parser.skipValue();
+        });
+        if (pin.owner == Config::PinOwner::IoExpander) {
+            pin.gpio = -1;
+        } else {
+            pin.expanderPin = 0;
+        }
+        return ok;
+    }
+    if (next == '\"') {
+        String text;
+        if (!parser.parseString(text)) {
+            return false;
+        }
+        return parseOwnedPinString(text, pin);
+    }
+    int value = 0;
+    if (!parser.parseInt(value)) {
+        return false;
+    }
+    pin.owner = Config::PinOwner::Slave;
+    pin.gpio = value;
+    pin.expanderPin = 0;
+    return true;
+}
 
 const char CONTROL_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html>
 <html lang="en">
@@ -910,34 +995,51 @@ void ControlServer::handleConfigImport() {
                 if (pinKey == "leftDriver") {
                     return parser.parseObject([&](const String& driverKey) {
                         if (driverKey == "motorA") {
-                            bool ok = parser.parseObject([&](const String& chanKey) {
-                                int value = 0;
-                                if (!parser.parseInt(value)) return false;
-                                if (chanKey == "pwm") config_->pins.leftDriver.motorA.pwm = value;
-                                else if (chanKey == "in1") config_->pins.leftDriver.motorA.in1 = value;
-                                else if (chanKey == "in2") config_->pins.leftDriver.motorA.in2 = value;
-                                else return false;
-                                changed = true;
-                                return true;
+                            return parser.parseObject([&](const String& chanKey) {
+                                if (chanKey == "pwm") {
+                                    int value = 0;
+                                    if (!parser.parseInt(value)) return false;
+                                    config_->pins.leftDriver.motorA.pwm = value;
+                                    changed = true;
+                                    return true;
+                                }
+                                if (chanKey == "in1") {
+                                    if (!parseOwnedPinNode(parser, config_->pins.leftDriver.motorA.in1)) return false;
+                                    changed = true;
+                                    return true;
+                                }
+                                if (chanKey == "in2") {
+                                    if (!parseOwnedPinNode(parser, config_->pins.leftDriver.motorA.in2)) return false;
+                                    changed = true;
+                                    return true;
+                                }
+                                return parser.skipValue();
                             });
-                            return ok;
                         }
                         if (driverKey == "motorB") {
                             return parser.parseObject([&](const String& chanKey) {
-                                int value = 0;
-                                if (!parser.parseInt(value)) return false;
-                                if (chanKey == "pwm") config_->pins.leftDriver.motorB.pwm = value;
-                                else if (chanKey == "in1") config_->pins.leftDriver.motorB.in1 = value;
-                                else if (chanKey == "in2") config_->pins.leftDriver.motorB.in2 = value;
-                                else return false;
-                                changed = true;
-                                return true;
+                                if (chanKey == "pwm") {
+                                    int value = 0;
+                                    if (!parser.parseInt(value)) return false;
+                                    config_->pins.leftDriver.motorB.pwm = value;
+                                    changed = true;
+                                    return true;
+                                }
+                                if (chanKey == "in1") {
+                                    if (!parseOwnedPinNode(parser, config_->pins.leftDriver.motorB.in1)) return false;
+                                    changed = true;
+                                    return true;
+                                }
+                                if (chanKey == "in2") {
+                                    if (!parseOwnedPinNode(parser, config_->pins.leftDriver.motorB.in2)) return false;
+                                    changed = true;
+                                    return true;
+                                }
+                                return parser.skipValue();
                             });
                         }
                         if (driverKey == "standby") {
-                            int value = 0;
-                            if (!parser.parseInt(value)) return false;
-                            config_->pins.leftDriver.standby = value;
+                            if (!parseOwnedPinNode(parser, config_->pins.leftDriver.standby)) return false;
                             changed = true;
                             return true;
                         }
@@ -948,32 +1050,50 @@ void ControlServer::handleConfigImport() {
                     return parser.parseObject([&](const String& driverKey) {
                         if (driverKey == "motorA") {
                             return parser.parseObject([&](const String& chanKey) {
-                                int value = 0;
-                                if (!parser.parseInt(value)) return false;
-                                if (chanKey == "pwm") config_->pins.rightDriver.motorA.pwm = value;
-                                else if (chanKey == "in1") config_->pins.rightDriver.motorA.in1 = value;
-                                else if (chanKey == "in2") config_->pins.rightDriver.motorA.in2 = value;
-                                else return false;
-                                changed = true;
-                                return true;
+                                if (chanKey == "pwm") {
+                                    int value = 0;
+                                    if (!parser.parseInt(value)) return false;
+                                    config_->pins.rightDriver.motorA.pwm = value;
+                                    changed = true;
+                                    return true;
+                                }
+                                if (chanKey == "in1") {
+                                    if (!parseOwnedPinNode(parser, config_->pins.rightDriver.motorA.in1)) return false;
+                                    changed = true;
+                                    return true;
+                                }
+                                if (chanKey == "in2") {
+                                    if (!parseOwnedPinNode(parser, config_->pins.rightDriver.motorA.in2)) return false;
+                                    changed = true;
+                                    return true;
+                                }
+                                return parser.skipValue();
                             });
                         }
                         if (driverKey == "motorB") {
                             return parser.parseObject([&](const String& chanKey) {
-                                int value = 0;
-                                if (!parser.parseInt(value)) return false;
-                                if (chanKey == "pwm") config_->pins.rightDriver.motorB.pwm = value;
-                                else if (chanKey == "in1") config_->pins.rightDriver.motorB.in1 = value;
-                                else if (chanKey == "in2") config_->pins.rightDriver.motorB.in2 = value;
-                                else return false;
-                                changed = true;
-                                return true;
+                                if (chanKey == "pwm") {
+                                    int value = 0;
+                                    if (!parser.parseInt(value)) return false;
+                                    config_->pins.rightDriver.motorB.pwm = value;
+                                    changed = true;
+                                    return true;
+                                }
+                                if (chanKey == "in1") {
+                                    if (!parseOwnedPinNode(parser, config_->pins.rightDriver.motorB.in1)) return false;
+                                    changed = true;
+                                    return true;
+                                }
+                                if (chanKey == "in2") {
+                                    if (!parseOwnedPinNode(parser, config_->pins.rightDriver.motorB.in2)) return false;
+                                    changed = true;
+                                    return true;
+                                }
+                                return parser.skipValue();
                             });
                         }
                         if (driverKey == "standby") {
-                            int value = 0;
-                            if (!parser.parseInt(value)) return false;
-                            config_->pins.rightDriver.standby = value;
+                            if (!parseOwnedPinNode(parser, config_->pins.rightDriver.standby)) return false;
                             changed = true;
                             return true;
                         }
@@ -1000,6 +1120,46 @@ void ControlServer::handleConfigImport() {
                     config_->pins.batterySense = value;
                     changed = true;
                     return true;
+                }
+                if (pinKey == "ioExpander") {
+                    return parser.parseObject([&](const String& ioKey) {
+                        if (ioKey == "enabled") {
+                            bool val = false;
+                            if (!parser.parseBool(val)) return false;
+                            config_->pins.ioExpander.enabled = val;
+                            changed = true;
+                            return true;
+                        }
+                        if (ioKey == "address") {
+                            int value = 0;
+                            if (!parser.parseInt(value)) return false;
+                            config_->pins.ioExpander.address = static_cast<std::uint8_t>(value);
+                            changed = true;
+                            return true;
+                        }
+                        if (ioKey == "useMux") {
+                            bool val = false;
+                            if (!parser.parseBool(val)) return false;
+                            config_->pins.ioExpander.useMux = val;
+                            changed = true;
+                            return true;
+                        }
+                        if (ioKey == "muxAddress") {
+                            int value = 0;
+                            if (!parser.parseInt(value)) return false;
+                            config_->pins.ioExpander.muxAddress = static_cast<std::uint8_t>(value);
+                            changed = true;
+                            return true;
+                        }
+                        if (ioKey == "muxChannel") {
+                            int value = 0;
+                            if (!parser.parseInt(value)) return false;
+                            config_->pins.ioExpander.muxChannel = static_cast<std::uint8_t>(value);
+                            changed = true;
+                            return true;
+                        }
+                        return parser.skipValue();
+                    });
                 }
                 return parser.skipValue();
             });
@@ -1154,6 +1314,41 @@ void ControlServer::handleConfigPost() {
             changed = true;
         }
     }
+    if (server_.hasArg("ioEnabled")) {
+        const bool val = server_.arg("ioEnabled") == "1";
+        if (config_->pins.ioExpander.enabled != val) {
+            config_->pins.ioExpander.enabled = val;
+            changed = true;
+        }
+    }
+    if (server_.hasArg("ioAddress")) {
+        const int addr = server_.arg("ioAddress").toInt();
+        if (addr >= 0 && addr <= 127 && config_->pins.ioExpander.address != addr) {
+            config_->pins.ioExpander.address = static_cast<std::uint8_t>(addr);
+            changed = true;
+        }
+    }
+    if (server_.hasArg("ioMuxEnabled")) {
+        const bool val = server_.arg("ioMuxEnabled") == "1";
+        if (config_->pins.ioExpander.useMux != val) {
+            config_->pins.ioExpander.useMux = val;
+            changed = true;
+        }
+    }
+    if (server_.hasArg("ioMuxAddress")) {
+        const int addr = server_.arg("ioMuxAddress").toInt();
+        if (addr >= 0 && addr <= 127 && config_->pins.ioExpander.muxAddress != addr) {
+            config_->pins.ioExpander.muxAddress = static_cast<std::uint8_t>(addr);
+            changed = true;
+        }
+    }
+    if (server_.hasArg("ioMuxChannel")) {
+        const int channel = server_.arg("ioMuxChannel").toInt();
+        if (channel >= 0 && channel <= 7 && config_->pins.ioExpander.muxChannel != channel) {
+            config_->pins.ioExpander.muxChannel = static_cast<std::uint8_t>(channel);
+            changed = true;
+        }
+    }
 
     auto copyString = [](char* dest, size_t len, const String& src) {
         if (len == 0) {
@@ -1292,21 +1487,32 @@ String ControlServer::buildConfigJson(bool includeSensitive) const {
 
     json += "\"pins\":{";
     auto channelJson = [&](const Config::ChannelPins& ch) {
-        return "{\"pwm\":" + String(ch.pwm) + ",\"in1\":" + String(ch.in1) + ",\"in2\":" + String(ch.in2) + "}";
+        String json = "{\"pwm\":" + String(ch.pwm) + ",\"in1\":";
+        json += ownedPinToJson(ch.in1);
+        json += ",\"in2\":";
+        json += ownedPinToJson(ch.in2);
+        json += "}";
+        return json;
     };
     json += "\"leftDriver\":{";
     json += "\"motorA\":" + channelJson(config_->pins.leftDriver.motorA) + ",";
     json += "\"motorB\":" + channelJson(config_->pins.leftDriver.motorB) + ",";
-    json += "\"standby\":" + String(config_->pins.leftDriver.standby);
+    json += "\"standby\":" + ownedPinToJson(config_->pins.leftDriver.standby);
     json += "},";
     json += "\"rightDriver\":{";
     json += "\"motorA\":" + channelJson(config_->pins.rightDriver.motorA) + ",";
     json += "\"motorB\":" + channelJson(config_->pins.rightDriver.motorB) + ",";
-    json += "\"standby\":" + String(config_->pins.rightDriver.standby);
+    json += "\"standby\":" + ownedPinToJson(config_->pins.rightDriver.standby);
     json += "},";
     json += "\"lightBar\":" + String(config_->pins.lightBar) + ",";
     json += "\"speaker\":" + String(config_->pins.speaker) + ",";
     json += "\"batterySense\":" + String(config_->pins.batterySense);
+    json += ",\"ioExpander\":{";
+    json += "\"enabled\":" + String(config_->pins.ioExpander.enabled ? 1 : 0) + ",";
+    json += "\"address\":" + String(config_->pins.ioExpander.address) + ",";
+    json += "\"useMux\":" + String(config_->pins.ioExpander.useMux ? 1 : 0) + ",";
+    json += "\"muxAddress\":" + String(config_->pins.ioExpander.muxAddress) + ",";
+    json += "\"muxChannel\":" + String(config_->pins.ioExpander.muxChannel);
     json += "},";
 
     json += "\"rcPins\":[";

@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdarg>
@@ -84,11 +85,14 @@ bool wizardInputPending_ = false;
 String wizardInputBuffer_;
 static Config::RuntimeConfig baselineConfig_{};
 static bool baselineInitialized_ = false;
+bool lastCharWasCr_ = false;
+bool lastCharWasLf_ = false;
 
 void processLine(const String& line, ConsoleSource source);
 void beginWizardSession();
 void finishWizardSession();
 static void snapshotBaseline() {
+    Serial.println(F("[TRACE] snapshotBaseline"));
     if (ctx_.config) {
         baselineConfig_ = *ctx_.config;
         baselineInitialized_ = true;
@@ -96,6 +100,7 @@ static void snapshotBaseline() {
 }
 
 void beginWizardSession() {
+    Serial.println(F("[TRACE] beginWizardSession"));
     wizardActive_ = true;
     wizardSource_ = activeSource_;
     wizardInputPending_ = false;
@@ -105,6 +110,7 @@ void beginWizardSession() {
 }
 
 void finishWizardSession() {
+    Serial.println(F("[TRACE] finishWizardSession"));
     wizardActive_ = false;
     wizardInputPending_ = false;
     wizardAbortRequested_ = false;
@@ -116,6 +122,7 @@ String readLineBlocking() {
     const ConsoleSource source = wizardActive_ ? wizardSource_ : ConsoleSource::Serial;
     String line;
     while (true) {
+        Serial.println(F("[TRACE] readLineBlocking loop"));
         if (source == ConsoleSource::Serial) {
             while (Serial.available()) {
                 char c = static_cast<char>(Serial.read());
@@ -140,6 +147,7 @@ String readLineBlocking() {
 }
 
 int promptInt(const String& label, int current) {
+    Serial.println(F("[TRACE] promptInt"));
     console.print(label);
     console.print(" [");
     console.print(current);
@@ -159,6 +167,7 @@ int promptInt(const String& label, int current) {
 }
 
 bool promptBool(const String& label, bool current) {
+    Serial.println(F("[TRACE] promptBool"));
     console.print(label);
     console.print(" [");
     console.print(current ? "Y" : "N");
@@ -186,6 +195,7 @@ bool promptBool(const String& label, bool current) {
 }
 
 String promptString(const String& label, const String& current, size_t maxLen) {
+    Serial.println(F("[TRACE] promptString"));
     console.print(label);
     console.print(" [");
     console.print(current);
@@ -205,6 +215,65 @@ String promptString(const String& label, const String& current, size_t maxLen) {
         line = line.substring(0, static_cast<int>(maxLen) - 1);
     }
     return line;
+}
+
+String describeOwnedPin(const Config::OwnedPin& pin) {
+    if (pin.owner == Config::PinOwner::IoExpander) {
+        return String("IO[") + pin.expanderPin + "]";
+    }
+    if (pin.gpio < 0) {
+        return String(F("DISABLED"));
+    }
+    return String("GPIO ") + pin.gpio;
+}
+
+bool ownedPinsEqual(const Config::OwnedPin& a, const Config::OwnedPin& b) {
+    return a.owner == b.owner && a.gpio == b.gpio && a.expanderPin == b.expanderPin;
+}
+
+bool parseBoolToken(const String& text, bool& out) {
+    String lower = text;
+    lower.trim();
+    lower.toLowerCase();
+    if (lower == "1" || lower == "true" || lower == "on" || lower == "yes") {
+        out = true;
+        return true;
+    }
+    if (lower == "0" || lower == "false" || lower == "off" || lower == "no") {
+        out = false;
+        return true;
+    }
+    return false;
+}
+
+bool parseOwnedPinValue(const String& value, Config::OwnedPin& pin) {
+    String trimmed = value;
+    trimmed.trim();
+    if (trimmed.isEmpty()) {
+        return false;
+    }
+    String lower = trimmed;
+    lower.toLowerCase();
+    if (lower.startsWith("io")) {
+        int sep = lower.indexOf(':');
+        String number = sep >= 0 ? lower.substring(sep + 1) : lower.substring(2);
+        number.trim();
+        const int idx = number.toInt();
+        pin.owner = Config::PinOwner::IoExpander;
+        pin.expanderPin = static_cast<std::uint8_t>(std::max(0, idx));
+        pin.gpio = -1;
+        return true;
+    }
+    if (lower == "none" || lower == "off") {
+        pin.owner = Config::PinOwner::Slave;
+        pin.gpio = -1;
+        pin.expanderPin = 0;
+        return true;
+    }
+    pin.owner = Config::PinOwner::Slave;
+    pin.gpio = trimmed.toInt();
+    pin.expanderPin = 0;
+    return true;
 }
 
 struct HelpEntry {
@@ -320,6 +389,7 @@ void runHelpMenu() {
 }
 
 void showConfig() {
+    Serial.println(F("[TRACE] showConfig"));
     if (!ctx_.config) {
         console.println(F("No config available."));
         return;
@@ -328,16 +398,30 @@ void showConfig() {
     const auto& pins = ctx_.config->pins;
     const auto& features = ctx_.config->features;
     console.println(F("--- Pin Assignments ---"));
-    console.printf("Left Motor A (PWM,IN1,IN2): %d, %d, %d\n", pins.leftDriver.motorA.pwm, pins.leftDriver.motorA.in1, pins.leftDriver.motorA.in2);
-    console.printf("Left Motor B (PWM,IN1,IN2): %d, %d, %d\n", pins.leftDriver.motorB.pwm, pins.leftDriver.motorB.in1, pins.leftDriver.motorB.in2);
-    console.printf("Left Driver STBY: %d\n", pins.leftDriver.standby);
-    console.printf("Right Motor A (PWM,IN1,IN2): %d, %d, %d\n", pins.rightDriver.motorA.pwm, pins.rightDriver.motorA.in1, pins.rightDriver.motorA.in2);
-    console.printf("Right Motor B (PWM,IN1,IN2): %d, %d, %d\n", pins.rightDriver.motorB.pwm, pins.rightDriver.motorB.in1, pins.rightDriver.motorB.in2);
-    console.printf("Right Driver STBY: %d\n", pins.rightDriver.standby);
+    auto printChannel = [&](const char* label, const Config::ChannelPins& ch) {
+        const String in1 = describeOwnedPin(ch.in1);
+        const String in2 = describeOwnedPin(ch.in2);
+        console.printf("%s (PWM,IN1,IN2): %d, %s, %s\n", label, ch.pwm, in1.c_str(), in2.c_str());
+    };
+    const String leftStby = describeOwnedPin(pins.leftDriver.standby);
+    const String rightStby = describeOwnedPin(pins.rightDriver.standby);
+    printChannel("Left Motor A", pins.leftDriver.motorA);
+    printChannel("Left Motor B", pins.leftDriver.motorB);
+    console.printf("Left Driver STBY: %s\n", leftStby.c_str());
+    printChannel("Right Motor A", pins.rightDriver.motorA);
+    printChannel("Right Motor B", pins.rightDriver.motorB);
+    console.printf("Right Driver STBY: %s\n", rightStby.c_str());
     console.printf("Light bar pin: %d\n", pins.lightBar);
     console.printf("Speaker pin: %d\n", pins.speaker);
     console.printf("Battery sense pin: %d\n", pins.batterySense);
     console.printf("Slave link TX/RX: %d / %d\n", pins.slaveTx, pins.slaveRx);
+    console.println(F("--- IO Expander ---"));
+    console.printf("Enabled: %s\n", pins.ioExpander.enabled ? "yes" : "no");
+    console.printf("Address: 0x%02X\n", pins.ioExpander.address);
+    console.printf("Use PCA9548A: %s (addr 0x%02X, channel %u)\n",
+                  pins.ioExpander.useMux ? "yes" : "no",
+                  pins.ioExpander.muxAddress,
+                  static_cast<unsigned>(pins.ioExpander.muxChannel));
 
     console.println(F("--- RC Receiver Pins ---"));
     for (std::size_t i = 0; i < Drivers::RcReceiver::kChannelCount; ++i) {
@@ -371,10 +455,14 @@ void showConfig() {
 }
 
 struct PinTokenInfo {
+    enum class Kind { IntValue, OwnedPin };
     String token;
     const char* description;
-    int* value;
-    int baseline;
+    Kind kind = Kind::IntValue;
+    int* value = nullptr;
+    Config::OwnedPin* owned = nullptr;
+    int baseline = -1;
+    Config::OwnedPin ownedBaseline{};
 };
 
 static std::vector<PinTokenInfo> collectPinTokens() {
@@ -392,37 +480,52 @@ static std::vector<PinTokenInfo> collectPinTokens() {
         return (baselineInitialized_ && basePtr) ? *basePtr : current;
     };
 
-    auto add = [&](const char* token, const char* desc, int& ref, const int* basePtr) {
+    auto baselinePin = [&](const Config::OwnedPin& current, const Config::OwnedPin* basePtr) {
+        return (baselineInitialized_ && basePtr) ? *basePtr : current;
+    };
+
+    auto addInt = [&](const char* token, const char* desc, int& ref, const int* basePtr) {
         PinTokenInfo info;
         info.token = token;
         info.description = desc;
+        info.kind = PinTokenInfo::Kind::IntValue;
         info.value = &ref;
         info.baseline = baselineValue(ref, basePtr);
         tokens.push_back(info);
     };
 
+    auto addOwned = [&](const char* token, const char* desc, Config::OwnedPin& ref, const Config::OwnedPin* basePtr) {
+        PinTokenInfo info;
+        info.token = token;
+        info.description = desc;
+        info.kind = PinTokenInfo::Kind::OwnedPin;
+        info.owned = &ref;
+        info.ownedBaseline = baselinePin(ref, basePtr);
+        tokens.push_back(info);
+    };
+
     const auto& bp = baselineConfig_.pins;
-    add("lma_pwm", "Left motor A PWM", pins.leftDriver.motorA.pwm, basePins ? &bp.leftDriver.motorA.pwm : nullptr);
-    add("lma_in1", "Left motor A IN1", pins.leftDriver.motorA.in1, basePins ? &bp.leftDriver.motorA.in1 : nullptr);
-    add("lma_in2", "Left motor A IN2", pins.leftDriver.motorA.in2, basePins ? &bp.leftDriver.motorA.in2 : nullptr);
-    add("lmb_pwm", "Left motor B PWM", pins.leftDriver.motorB.pwm, basePins ? &bp.leftDriver.motorB.pwm : nullptr);
-    add("lmb_in1", "Left motor B IN1", pins.leftDriver.motorB.in1, basePins ? &bp.leftDriver.motorB.in1 : nullptr);
-    add("lmb_in2", "Left motor B IN2", pins.leftDriver.motorB.in2, basePins ? &bp.leftDriver.motorB.in2 : nullptr);
-    add("left_stby", "Left driver STBY", pins.leftDriver.standby, basePins ? &bp.leftDriver.standby : nullptr);
+    addInt("lma_pwm", "Left motor A PWM", pins.leftDriver.motorA.pwm, basePins ? &bp.leftDriver.motorA.pwm : nullptr);
+    addOwned("lma_in1", "Left motor A IN1", pins.leftDriver.motorA.in1, basePins ? &bp.leftDriver.motorA.in1 : nullptr);
+    addOwned("lma_in2", "Left motor A IN2", pins.leftDriver.motorA.in2, basePins ? &bp.leftDriver.motorA.in2 : nullptr);
+    addInt("lmb_pwm", "Left motor B PWM", pins.leftDriver.motorB.pwm, basePins ? &bp.leftDriver.motorB.pwm : nullptr);
+    addOwned("lmb_in1", "Left motor B IN1", pins.leftDriver.motorB.in1, basePins ? &bp.leftDriver.motorB.in1 : nullptr);
+    addOwned("lmb_in2", "Left motor B IN2", pins.leftDriver.motorB.in2, basePins ? &bp.leftDriver.motorB.in2 : nullptr);
+    addOwned("left_stby", "Left driver STBY", pins.leftDriver.standby, basePins ? &bp.leftDriver.standby : nullptr);
 
-    add("rma_pwm", "Right motor A PWM", pins.rightDriver.motorA.pwm, basePins ? &bp.rightDriver.motorA.pwm : nullptr);
-    add("rma_in1", "Right motor A IN1", pins.rightDriver.motorA.in1, basePins ? &bp.rightDriver.motorA.in1 : nullptr);
-    add("rma_in2", "Right motor A IN2", pins.rightDriver.motorA.in2, basePins ? &bp.rightDriver.motorA.in2 : nullptr);
-    add("rmb_pwm", "Right motor B PWM", pins.rightDriver.motorB.pwm, basePins ? &bp.rightDriver.motorB.pwm : nullptr);
-    add("rmb_in1", "Right motor B IN1", pins.rightDriver.motorB.in1, basePins ? &bp.rightDriver.motorB.in1 : nullptr);
-    add("rmb_in2", "Right motor B IN2", pins.rightDriver.motorB.in2, basePins ? &bp.rightDriver.motorB.in2 : nullptr);
-    add("right_stby", "Right driver STBY", pins.rightDriver.standby, basePins ? &bp.rightDriver.standby : nullptr);
+    addInt("rma_pwm", "Right motor A PWM", pins.rightDriver.motorA.pwm, basePins ? &bp.rightDriver.motorA.pwm : nullptr);
+    addOwned("rma_in1", "Right motor A IN1", pins.rightDriver.motorA.in1, basePins ? &bp.rightDriver.motorA.in1 : nullptr);
+    addOwned("rma_in2", "Right motor A IN2", pins.rightDriver.motorA.in2, basePins ? &bp.rightDriver.motorA.in2 : nullptr);
+    addInt("rmb_pwm", "Right motor B PWM", pins.rightDriver.motorB.pwm, basePins ? &bp.rightDriver.motorB.pwm : nullptr);
+    addOwned("rmb_in1", "Right motor B IN1", pins.rightDriver.motorB.in1, basePins ? &bp.rightDriver.motorB.in1 : nullptr);
+    addOwned("rmb_in2", "Right motor B IN2", pins.rightDriver.motorB.in2, basePins ? &bp.rightDriver.motorB.in2 : nullptr);
+    addOwned("right_stby", "Right driver STBY", pins.rightDriver.standby, basePins ? &bp.rightDriver.standby : nullptr);
 
-    add("lightbar", "Light bar pin", pins.lightBar, basePins ? &bp.lightBar : nullptr);
-    add("speaker", "Speaker pin", pins.speaker, basePins ? &bp.speaker : nullptr);
-    add("battery", "Battery sense pin", pins.batterySense, basePins ? &bp.batterySense : nullptr);
-    add("slave_tx", "Slave link TX pin", pins.slaveTx, basePins ? &bp.slaveTx : nullptr);
-    add("slave_rx", "Slave link RX pin", pins.slaveRx, basePins ? &bp.slaveRx : nullptr);
+    addInt("lightbar", "Light bar pin", pins.lightBar, basePins ? &bp.lightBar : nullptr);
+    addInt("speaker", "Speaker pin", pins.speaker, basePins ? &bp.speaker : nullptr);
+    addInt("battery", "Battery sense pin", pins.batterySense, basePins ? &bp.batterySense : nullptr);
+    addInt("slave_tx", "Slave link TX pin", pins.slaveTx, basePins ? &bp.slaveTx : nullptr);
+    addInt("slave_rx", "Slave link RX pin", pins.slaveRx, basePins ? &bp.slaveRx : nullptr);
 
     for (std::size_t i = 0; i < std::size(rc.channelPins); ++i) {
         String name = "rc" + String(i + 1);
@@ -445,7 +548,20 @@ static void printPinList() {
     }
     console.println(F("--- Pin Tokens ---"));
     for (const auto& t : tokens) {
-        console.printf("%-10s = %-4d (%s)\n", t.token.c_str(), *t.value, t.description);
+        if (t.kind == PinTokenInfo::Kind::OwnedPin) {
+            const String desc = describeOwnedPin(*t.owned);
+            console.printf("%-10s = %-8s (%s)\n", t.token.c_str(), desc.c_str(), t.description);
+        } else {
+            console.printf("%-10s = %-4d (%s)\n", t.token.c_str(), *t.value, t.description);
+        }
+    }
+    if (ctx_.config) {
+        const auto& io = ctx_.config->pins.ioExpander;
+        console.printf("io_enabled = %s\n", io.enabled ? "on" : "off");
+        console.printf("io_addr    = %u\n", io.address);
+        console.printf("io_mux_enabled = %s\n", io.useMux ? "on" : "off");
+        console.printf("io_mux_addr    = %u\n", io.muxAddress);
+        console.printf("io_mux_channel = %u\n", io.muxChannel);
     }
 }
 
@@ -457,26 +573,82 @@ static void printPinDiff() {
     const auto tokens = collectPinTokens();
     bool any = false;
     for (const auto& t : tokens) {
-        if (*t.value != t.baseline) {
+        bool changed = false;
+        if (t.kind == PinTokenInfo::Kind::OwnedPin) {
+            if (!ownedPinsEqual(*t.owned, t.ownedBaseline)) {
+                changed = true;
+            }
+        } else if (*t.value != t.baseline) {
+            changed = true;
+        }
+        if (changed) {
             if (!any) {
                 console.println(F("--- Pin diffs since last save ---"));
                 any = true;
             }
-            console.printf("%-10s: %d -> %d\n", t.token.c_str(), t.baseline, *t.value);
+            if (t.kind == PinTokenInfo::Kind::OwnedPin) {
+                const String before = describeOwnedPin(t.ownedBaseline);
+                const String after = describeOwnedPin(*t.owned);
+                console.printf("%-10s: %s -> %s\n", t.token.c_str(), before.c_str(), after.c_str());
+            } else {
+                console.printf("%-10s: %d -> %d\n", t.token.c_str(), t.baseline, *t.value);
+            }
         }
+    }
+    if (ctx_.config) {
+        const auto& currentIo = ctx_.config->pins.ioExpander;
+        const auto& baseIo = baselineConfig_.pins.ioExpander;
+        auto emitIoDiff = [&](const char* name, auto before, auto after) {
+            if (before != after) {
+                if (!any) {
+                    console.println(F("--- Pin diffs since last save ---"));
+                    any = true;
+                }
+                console.printf("%-10s: %ld -> %ld\n", name, static_cast<long>(before), static_cast<long>(after));
+            }
+        };
+        emitIoDiff("io_enabled", baseIo.enabled, currentIo.enabled);
+        emitIoDiff("io_addr", baseIo.address, currentIo.address);
+        emitIoDiff("io_mux_enabled", baseIo.useMux, currentIo.useMux);
+        emitIoDiff("io_mux_addr", baseIo.muxAddress, currentIo.muxAddress);
+        emitIoDiff("io_mux_channel", baseIo.muxChannel, currentIo.muxChannel);
     }
     if (!any) {
         console.println(F("No pin changes since last save."));
     }
 }
 
+bool configureOwnedPinField(const char* label, Config::OwnedPin& pin) {
+    const bool currentExp = pin.owner == Config::PinOwner::IoExpander;
+    const bool useExp = promptBool(String(label) + " via IO expander", currentExp);
+    if (wizardAbortRequested_) {
+        return false;
+    }
+    if (useExp) {
+        pin.owner = Config::PinOwner::IoExpander;
+        const int idx = promptInt(String(label) + " expander pin (0-15)", pin.expanderPin);
+        if (wizardAbortRequested_) {
+            return false;
+        }
+        pin.expanderPin = static_cast<std::uint8_t>(std::max(0, idx));
+        pin.gpio = -1;
+    } else {
+        pin.owner = Config::PinOwner::Slave;
+        pin.expanderPin = 0;
+        pin.gpio = promptInt(String(label) + " GPIO", pin.gpio);
+        if (wizardAbortRequested_) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void configureChannel(const char* label, Config::ChannelPins& pins) {
     console.println(label);
     pins.pwm = promptInt("  PWM", pins.pwm);
     if (wizardAbortRequested_) return;
-    pins.in1 = promptInt("  IN1", pins.in1);
-    if (wizardAbortRequested_) return;
-    pins.in2 = promptInt("  IN2", pins.in2);
+    if (!configureOwnedPinField("  IN1", pins.in1)) return;
+    if (!configureOwnedPinField("  IN2", pins.in2)) return;
 }
 
 void configureRgbChannel(const char* label, Config::RgbChannel& rgb) {
@@ -530,7 +702,33 @@ void configureLighting(Config::LightingConfig& lighting) {
     lighting.blink.periodMs = static_cast<std::uint16_t>(promptInt("Blink period (ms)", lighting.blink.periodMs));
 }
 
+void configureIoExpander(Config::IoExpanderConfig& io) {
+    console.println(F("IO expander setup:"));
+    io.enabled = promptBool("  Enabled", io.enabled);
+    if (wizardAbortRequested_) return;
+    int addr = promptInt("  Expander I2C address", io.address);
+    if (wizardAbortRequested_) return;
+    if (addr >= 0 && addr <= 127) {
+        io.address = static_cast<std::uint8_t>(addr);
+    }
+    io.useMux = promptBool("  Use PCA9548A mux", io.useMux);
+    if (wizardAbortRequested_) return;
+    if (io.useMux) {
+        int muxAddr = promptInt("  Mux address", io.muxAddress);
+        if (wizardAbortRequested_) return;
+        if (muxAddr >= 0 && muxAddr <= 127) {
+            io.muxAddress = static_cast<std::uint8_t>(muxAddr);
+        }
+        int channel = promptInt("  Mux channel (0-7)", io.muxChannel);
+        if (wizardAbortRequested_) return;
+        if (channel >= 0 && channel <= 7) {
+            io.muxChannel = static_cast<std::uint8_t>(channel);
+        }
+    }
+}
+
 void runWifiWizard() {
+    Serial.println(F("[TRACE] runWifiWizard"));
     if (!ctx_.config) {
         console.println(F("Config not initialized."));
         return;
@@ -624,6 +822,8 @@ void handlePinCommand(const String& args) {
         console.println(F("  rmb_pwm,rmb_in1,rmb_in2"));
         console.println(F("  left_stby,right_stby,lightbar,speaker,battery,slave_tx,slave_rx"));
         console.println(F("  rc1,rc2,rc3,rc4,rc5,rc6"));
+        console.println(F("Value hints: use numbers for GPIO or io:<n> to map to the expander."));
+        console.println(F("IO expander tokens: io_enabled, io_addr, io_mux_enabled, io_mux_addr, io_mux_channel"));
         console.println(F("  list  (show all pins)"));
         console.println(F("  diff  (show pins changed since last save)"));
         return;
@@ -638,25 +838,48 @@ void handlePinCommand(const String& args) {
     }
 
     auto& pins = ctx_.config->pins;
-    struct Binding {
+    struct IntBinding {
         const char* name;
         int* ptr;
     };
-    Binding bindings[] = {
-        {"lma_pwm", &pins.leftDriver.motorA.pwm},
+    struct OwnedBinding {
+        const char* name;
+        Config::OwnedPin* ptr;
+    };
+    OwnedBinding ownedBindings[] = {
         {"lma_in1", &pins.leftDriver.motorA.in1},
         {"lma_in2", &pins.leftDriver.motorA.in2},
-        {"lmb_pwm", &pins.leftDriver.motorB.pwm},
         {"lmb_in1", &pins.leftDriver.motorB.in1},
         {"lmb_in2", &pins.leftDriver.motorB.in2},
-        {"rma_pwm", &pins.rightDriver.motorA.pwm},
         {"rma_in1", &pins.rightDriver.motorA.in1},
         {"rma_in2", &pins.rightDriver.motorA.in2},
-        {"rmb_pwm", &pins.rightDriver.motorB.pwm},
         {"rmb_in1", &pins.rightDriver.motorB.in1},
         {"rmb_in2", &pins.rightDriver.motorB.in2},
         {"left_stby", &pins.leftDriver.standby},
         {"right_stby", &pins.rightDriver.standby},
+    };
+
+    for (const auto& binding : ownedBindings) {
+        if (token == binding.name) {
+            if (valueStr.isEmpty()) {
+                console.printf("%s = %s\n", binding.name, describeOwnedPin(*binding.ptr).c_str());
+            } else if (parseOwnedPinValue(valueStr, *binding.ptr)) {
+                console.printf("%s set to %s\n", binding.name, describeOwnedPin(*binding.ptr).c_str());
+                if (applyCallback_) {
+                    applyCallback_();
+                }
+            } else {
+                console.println(F("Invalid value. Use a GPIO number or io:<pin>."));
+            }
+            return;
+        }
+    }
+
+    IntBinding bindings[] = {
+        {"lma_pwm", &pins.leftDriver.motorA.pwm},
+        {"lmb_pwm", &pins.leftDriver.motorB.pwm},
+        {"rma_pwm", &pins.rightDriver.motorA.pwm},
+        {"rmb_pwm", &pins.rightDriver.motorB.pwm},
         {"lightbar", &pins.lightBar},
         {"speaker", &pins.speaker},
         {"battery", &pins.batterySense},
@@ -680,6 +903,84 @@ void handlePinCommand(const String& args) {
         }
     }
 
+    if (token == "io_enabled") {
+        if (valueStr.isEmpty()) {
+            console.printf("io_enabled = %s\n", pins.ioExpander.enabled ? "on" : "off");
+        } else {
+            bool val = pins.ioExpander.enabled;
+            if (parseBoolToken(valueStr, val)) {
+                pins.ioExpander.enabled = val;
+                console.printf("io_enabled set to %s\n", val ? "on" : "off");
+                if (applyCallback_) {
+                    applyCallback_();
+                }
+            } else {
+                console.println(F("Use on/off or 1/0."));
+            }
+        }
+        return;
+    }
+    if (token == "io_mux_enabled") {
+        if (valueStr.isEmpty()) {
+            console.printf("io_mux_enabled = %s\n", pins.ioExpander.useMux ? "on" : "off");
+        } else {
+            bool val = pins.ioExpander.useMux;
+            if (parseBoolToken(valueStr, val)) {
+                pins.ioExpander.useMux = val;
+                console.printf("io_mux_enabled set to %s\n", val ? "on" : "off");
+                if (applyCallback_) applyCallback_();
+            } else {
+                console.println(F("Use on/off or 1/0."));
+            }
+        }
+        return;
+    }
+    if (token == "io_addr") {
+        if (valueStr.isEmpty()) {
+            console.printf("io_addr = %u\n", pins.ioExpander.address);
+        } else {
+            int addr = valueStr.toInt();
+            if (addr >= 0 && addr <= 127) {
+                pins.ioExpander.address = static_cast<std::uint8_t>(addr);
+                console.printf("io_addr set to %u\n", pins.ioExpander.address);
+                if (applyCallback_) applyCallback_();
+            } else {
+                console.println(F("Address must be 0-127."));
+            }
+        }
+        return;
+    }
+    if (token == "io_mux_addr") {
+        if (valueStr.isEmpty()) {
+            console.printf("io_mux_addr = %u\n", pins.ioExpander.muxAddress);
+        } else {
+            int addr = valueStr.toInt();
+            if (addr >= 0 && addr <= 127) {
+                pins.ioExpander.muxAddress = static_cast<std::uint8_t>(addr);
+                console.printf("io_mux_addr set to %u\n", pins.ioExpander.muxAddress);
+                if (applyCallback_) applyCallback_();
+            } else {
+                console.println(F("Mux address must be 0-127."));
+            }
+        }
+        return;
+    }
+    if (token == "io_mux_channel") {
+        if (valueStr.isEmpty()) {
+            console.printf("io_mux_channel = %u\n", pins.ioExpander.muxChannel);
+        } else {
+            int chan = valueStr.toInt();
+            if (chan >= 0 && chan <= 7) {
+                pins.ioExpander.muxChannel = static_cast<std::uint8_t>(chan);
+                console.printf("io_mux_channel set to %u\n", pins.ioExpander.muxChannel);
+                if (applyCallback_) applyCallback_();
+            } else {
+                console.println(F("Mux channel must be 0-7."));
+            }
+        }
+        return;
+    }
+
     if (token.startsWith("rc")) {
         int index = token.substring(2).toInt();
         if (index >= 1 && index <= static_cast<int>(std::size(ctx_.config->rc.channelPins))) {
@@ -701,6 +1002,7 @@ void handlePinCommand(const String& args) {
 }
 
 void runPinWizard() {
+    Serial.println(F("[TRACE] runPinWizard"));
     if (!ctx_.config) {
         console.println(F("Config not initialized."));
         return;
@@ -718,15 +1020,13 @@ void runPinWizard() {
         if (wizardAbortRequested_) { aborted = true; break; }
         configureChannel("Left Driver Motor B", temp.pins.leftDriver.motorB);
         if (wizardAbortRequested_) { aborted = true; break; }
-        temp.pins.leftDriver.standby = promptInt("Left driver STBY", temp.pins.leftDriver.standby);
-        if (wizardAbortRequested_) { aborted = true; break; }
+        if (!configureOwnedPinField("Left driver STBY", temp.pins.leftDriver.standby)) { aborted = true; break; }
 
         configureChannel("Right Driver Motor A", temp.pins.rightDriver.motorA);
         if (wizardAbortRequested_) { aborted = true; break; }
         configureChannel("Right Driver Motor B", temp.pins.rightDriver.motorB);
         if (wizardAbortRequested_) { aborted = true; break; }
-        temp.pins.rightDriver.standby = promptInt("Right driver STBY", temp.pins.rightDriver.standby);
-        if (wizardAbortRequested_) { aborted = true; break; }
+        if (!configureOwnedPinField("Right driver STBY", temp.pins.rightDriver.standby)) { aborted = true; break; }
 
         temp.pins.lightBar = promptInt("Light bar pin", temp.pins.lightBar);
         if (wizardAbortRequested_) { aborted = true; break; }
@@ -737,6 +1037,8 @@ void runPinWizard() {
         temp.pins.slaveTx = promptInt("Slave link TX pin", temp.pins.slaveTx);
         if (wizardAbortRequested_) { aborted = true; break; }
         temp.pins.slaveRx = promptInt("Slave link RX pin", temp.pins.slaveRx);
+        if (wizardAbortRequested_) { aborted = true; break; }
+        configureIoExpander(temp.pins.ioExpander);
         if (wizardAbortRequested_) { aborted = true; break; }
         configureRcPins(temp.rc);
         if (wizardAbortRequested_) { aborted = true; break; }
@@ -767,6 +1069,7 @@ void runPinWizard() {
 }
 
 void runFeatureWizard() {
+    Serial.println(F("[TRACE] runFeatureWizard"));
     if (!ctx_.config) {
         console.println(F("Config not initialized."));
         return;
@@ -890,6 +1193,8 @@ void runTestWizard() {
 }
 
 void handleCommand(String line) {
+    Serial.print(F("[TRACE] handleCommand: "));
+    Serial.println(line);
     line.trim();
     if (line.isEmpty()) {
         showHelp();
@@ -899,12 +1204,12 @@ void handleCommand(String line) {
     String lower = line;
     lower.toLowerCase();
 
-    if (lower == "help" || lower == "menu") {
-        runHelpMenu();
+    if (lower == "h" || lower == "?" || lower == "quick" || lower == "qr") {
+        showHelp();
         return;
     }
-    if (lower == "h" || lower == "?") {
-        showHelp();
+    if (lower == "help" || lower == "menu") {
+        runHelpMenu();
         return;
     }
     if (lower == "show" || lower == "s") {
@@ -987,6 +1292,8 @@ void handleCommand(String line) {
 }
 
 void processLine(const String& line, ConsoleSource source) {
+    Serial.print(F("[TRACE] processLine: "));
+    Serial.println(line);
     if (wizardActive_ && source != wizardSource_) {
         console.println(F("Wizard already running on another console. Please wait or exit it before entering new commands."));
         console.printPrompt();
@@ -1008,12 +1315,14 @@ void processLine(const String& line, ConsoleSource source) {
 void begin(const Context& ctx, ApplyConfigCallback applyCallback) {
     ctx_ = ctx;
     applyCallback_ = applyCallback;
-    promptShown_ = false;
+    promptShown_ = true;
     inputBuffer_.clear();
     snapshotBaseline();
+    Serial.println(F("[TRACE] UI::begin"));
 }
 
 void update() {
+    Serial.println(F("[TRACE] UI::update"));
     if (!promptShown_) {
         console.println();
         console.println(F("[TankRC] Serial console ready. Type 'help' for the interactive hub."));
@@ -1024,15 +1333,28 @@ void update() {
     while (Serial.available()) {
         char c = static_cast<char>(Serial.read());
         if (c == '\r') {
+            if (!lastCharWasCr_) {
+                lastCharWasCr_ = true;
+                lastCharWasLf_ = false;
+                String line = inputBuffer_;
+                inputBuffer_.clear();
+                processLine(line, ConsoleSource::Serial);
+            }
             continue;
         }
         if (c == '\n') {
-            String line = inputBuffer_;
-            inputBuffer_.clear();
-            processLine(line, ConsoleSource::Serial);
-        } else {
-            inputBuffer_ += c;
+            if (!lastCharWasLf_) {
+                lastCharWasLf_ = true;
+                lastCharWasCr_ = false;
+                String line = inputBuffer_;
+                inputBuffer_.clear();
+                processLine(line, ConsoleSource::Serial);
+            }
+            continue;
         }
+        lastCharWasCr_ = false;
+        lastCharWasLf_ = false;
+        inputBuffer_ += c;
     }
 }
 

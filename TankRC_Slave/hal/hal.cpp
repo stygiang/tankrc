@@ -5,6 +5,7 @@
 #include "config/features.h"
 #include "config/settings.h"
 #include "drivers/battery_monitor.h"
+#include "drivers/io_expander.h"
 #include "drivers/motor_driver.h"
 
 namespace TankRC::Hal {
@@ -12,26 +13,70 @@ namespace {
 Drivers::MotorDriver leftMotor;
 Drivers::MotorDriver rightMotor;
 Drivers::BatteryMonitor battery;
+Drivers::IoExpander ioExpander;
 #if FEATURE_LIGHTS
 Features::Lighting lighting;
 #endif
 
 Config::RuntimeConfig currentConfig{};
 bool motorsReady = false;
+bool ioExpanderReady = false;
 #if FEATURE_LIGHTS
 bool lightingReady = false;
 #endif
 }  // namespace
 
 namespace {
+Drivers::DigitalPin makeDigitalPin(const Config::OwnedPin& pin) {
+    Drivers::DigitalPin out{};
+    if (pin.owner == Config::PinOwner::IoExpander) {
+        if (ioExpanderReady) {
+            out.source = Drivers::PinSource::IoExpander;
+            out.expanderPin = pin.expanderPin;
+        }
+    } else if (pin.gpio >= 0) {
+        out.source = Drivers::PinSource::Gpio;
+        out.gpio = pin.gpio;
+    }
+    return out;
+}
+
 Drivers::ChannelPins makeChannel(const Config::ChannelPins& pins) {
-    return Drivers::ChannelPins{pins.pwm, pins.in1, pins.in2};
+    Drivers::ChannelPins result{};
+    result.pwm = pins.pwm;
+    result.in1 = makeDigitalPin(pins.in1);
+    result.in2 = makeDigitalPin(pins.in2);
+    return result;
+}
+
+Drivers::DigitalPin makeStandbyPin(const Config::DriverPins& driver) {
+    return makeDigitalPin(driver.standby);
+}
+
+void configureIoExpander(const Config::PinAssignments& pins) {
+    ioExpanderReady = false;
+    if (!pins.ioExpander.enabled) {
+        return;
+    }
+    ioExpander.configure(pins.ioExpander.address,
+                         pins.ioExpander.useMux,
+                         pins.ioExpander.muxAddress,
+                         pins.ioExpander.muxChannel);
+    ioExpanderReady = ioExpander.begin();
 }
 
 void configureMotors(const Config::RuntimeConfig& config) {
     const auto& pins = config.pins;
-    leftMotor.attach(makeChannel(pins.leftDriver.motorA), makeChannel(pins.leftDriver.motorB), pins.leftDriver.standby);
-    rightMotor.attach(makeChannel(pins.rightDriver.motorA), makeChannel(pins.rightDriver.motorB), pins.rightDriver.standby);
+    configureIoExpander(pins);
+    Drivers::IoExpander* expanderPtr = ioExpanderReady ? &ioExpander : nullptr;
+    leftMotor.attach(makeChannel(pins.leftDriver.motorA),
+                     makeChannel(pins.leftDriver.motorB),
+                     makeStandbyPin(pins.leftDriver),
+                     expanderPtr);
+    rightMotor.attach(makeChannel(pins.rightDriver.motorA),
+                      makeChannel(pins.rightDriver.motorB),
+                      makeStandbyPin(pins.rightDriver),
+                      expanderPtr);
     const float ramp = Settings::motorDynamics.rampRate <= 0.0F ? 1.0F : Settings::motorDynamics.rampRate;
     leftMotor.setRampRate(ramp);
     rightMotor.setRampRate(ramp);

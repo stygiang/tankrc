@@ -5,45 +5,22 @@
 #include "config/pins.h"
 
 namespace TankRC::Config {
-namespace {
-OwnedPin makeGpioPin(int gpio) {
-    OwnedPin pin{};
-    pin.gpio = gpio;
-    pin.owner = PinOwner::Slave;
-    pin.expanderPin = 0;
-    return pin;
-}
-}  // namespace
-
 RuntimeConfig makeDefaultConfig() {
     RuntimeConfig config{};
 
-    config.pins.leftDriver.motorA.pwm = Pins::LEFT_MOTOR1_PWM;
-    config.pins.leftDriver.motorA.in1 = makeGpioPin(Pins::LEFT_MOTOR1_IN1);
-    config.pins.leftDriver.motorA.in2 = makeGpioPin(Pins::LEFT_MOTOR1_IN2);
-    config.pins.leftDriver.motorB.pwm = Pins::LEFT_MOTOR2_PWM;
-    config.pins.leftDriver.motorB.in1 = makeGpioPin(Pins::LEFT_MOTOR2_IN1);
-    config.pins.leftDriver.motorB.in2 = makeGpioPin(Pins::LEFT_MOTOR2_IN2);
-    config.pins.leftDriver.standby = makeGpioPin(Pins::LEFT_DRIVER_STBY);
+    config.pins.leftDriver.motorA = {Pins::LEFT_MOTOR1_PWM, Pins::LEFT_MOTOR1_IN1, Pins::LEFT_MOTOR1_IN2};
+    config.pins.leftDriver.motorB = {Pins::LEFT_MOTOR2_PWM, Pins::LEFT_MOTOR2_IN1, Pins::LEFT_MOTOR2_IN2};
+    config.pins.leftDriver.standby = Pins::LEFT_DRIVER_STBY;
 
-    config.pins.rightDriver.motorA.pwm = Pins::RIGHT_MOTOR1_PWM;
-    config.pins.rightDriver.motorA.in1 = makeGpioPin(Pins::RIGHT_MOTOR1_IN1);
-    config.pins.rightDriver.motorA.in2 = makeGpioPin(Pins::RIGHT_MOTOR1_IN2);
-    config.pins.rightDriver.motorB.pwm = Pins::RIGHT_MOTOR2_PWM;
-    config.pins.rightDriver.motorB.in1 = makeGpioPin(Pins::RIGHT_MOTOR2_IN1);
-    config.pins.rightDriver.motorB.in2 = makeGpioPin(Pins::RIGHT_MOTOR2_IN2);
-    config.pins.rightDriver.standby = makeGpioPin(Pins::RIGHT_DRIVER_STBY);
+    config.pins.rightDriver.motorA = {Pins::RIGHT_MOTOR1_PWM, Pins::RIGHT_MOTOR1_IN1, Pins::RIGHT_MOTOR1_IN2};
+    config.pins.rightDriver.motorB = {Pins::RIGHT_MOTOR2_PWM, Pins::RIGHT_MOTOR2_IN1, Pins::RIGHT_MOTOR2_IN2};
+    config.pins.rightDriver.standby = Pins::RIGHT_DRIVER_STBY;
 
     config.pins.lightBar = Pins::LIGHT_BAR;
     config.pins.speaker = Pins::SPEAKER;
     config.pins.batterySense = Pins::BATTERY_SENSE;
     config.pins.slaveTx = Pins::SLAVE_UART_TX;
     config.pins.slaveRx = Pins::SLAVE_UART_RX;
-    config.pins.ioExpander.enabled = false;
-    config.pins.ioExpander.useMux = true;
-    config.pins.ioExpander.address = 0x20;
-    config.pins.ioExpander.muxAddress = 0x70;
-    config.pins.ioExpander.muxChannel = 0;
 
     config.features.lightsEnabled = FEATURE_LIGHTS != 0;
     config.features.soundEnabled = FEATURE_SOUND != 0;
