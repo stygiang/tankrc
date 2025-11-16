@@ -971,6 +971,49 @@ void renderIoPortExpanderSummary(const Config::RuntimeConfig& config) {
     }
 }
 
+void renderPcfExpanderSummary(const Config::RuntimeConfig& config, const std::vector<PinWizardBinding>& bindings) {
+    console.println();
+    console.println(F(" PCF8575 IO Expander"));
+    console.printf("  Address: 0x%02X [pcf_addr]\n", config.pins.pcfAddress);
+    std::array<String, 16> usage;
+    for (auto& entry : usage) {
+        entry = F("unused");
+    }
+    auto appendUsage = [&](int idx, const PinWizardBinding& binding) {
+        if (idx < 0 || idx >= static_cast<int>(usage.size())) {
+            return;
+        }
+        String entry = binding.label + " [" + binding.token + "]";
+        if (usage[idx] == F("unused")) {
+            usage[idx] = entry;
+        } else {
+            usage[idx] += F(", ");
+            usage[idx] += entry;
+        }
+    };
+    for (const auto& binding : bindings) {
+        if (!binding.allowPcf) {
+            continue;
+        }
+        const int idx = Config::pcfIndexFromPin(readBindingValue(binding));
+        if (idx >= 0) {
+            appendUsage(idx, binding);
+        }
+    }
+    console.println(F("  Channel map:"));
+    for (int row = 0; row < 16; row += 4) {
+        console.print(F("   "));
+        for (int col = 0; col < 4; ++col) {
+            const int idx = row + col;
+            console.printf("PCF%02d: %-32s", idx, usage[idx].c_str());
+            if (col < 3) {
+                console.print(F("  "));
+            }
+        }
+        console.println();
+    }
+}
+
 void renderDriverChannelRow(const char* name,
                             const Config::ChannelPins& channel,
                             const char* pwmToken,
@@ -1030,6 +1073,7 @@ void renderPinWizardDashboard(const Config::RuntimeConfig& config, const std::ve
     }
 
     renderIoPortExpanderSummary(config);
+    renderPcfExpanderSummary(config, bindings);
 
     const std::size_t pending = countPendingPinChanges(bindings);
     console.println();
@@ -1037,10 +1081,11 @@ void renderPinWizardDashboard(const Config::RuntimeConfig& config, const std::ve
     console.println(F("Quick edit: <token>=<value> or <token> <value>  (e.g. lma_pwm=32, rc1 15)"));
     console.println(F("Number keys open grouped editors:"));
     console.println(F(" 1) Left driver      2) Right driver       3) Lights/Speaker/Battery"));
-    console.println(F(" 4) Slave link       5) RC receiver pins   6) IO port expander"));
-    console.println(F(" 7) PCA9685 address  8) PCF8575 address    9) Finish wizard"));
+    console.println(F(" 4) Slave link       5) RC receiver pins   6) PWM IO port expander"));
+    console.println(F(" 7) PCA9685 address  8) PCF8575 IO expander  9) Finish wizard"));
     console.println(F(" Type 0/exit to cancel without applying. '?' for help."));
-    console.println(F(" Tip: fl_*/fr_*/rl_*/rr_* tokens edit color channels without opening option 6 (IO port expander)."));
+    console.println(F(" Tip: fl_*/fr_*/rl_*/rr_* tokens edit color channels without opening option 6 (PWM IO port expander)."));
+    console.println(F(" Hint: Option 8 shows PCF8575 usage. Assign pins via '<token>=pcf#' or type 'pcf3' to inspect a channel."));
 }
 
 void configureLighting(Config::LightingConfig& lighting);
@@ -1056,7 +1101,7 @@ void printIoPortTokenHelp() {
 }
 
 void editIoPortExpander(Config::RuntimeConfig& config, std::vector<PinWizardBinding>& bindings) {
-    console.println(F("IO port expander editor. Type '?' for token help, 'done' to return."));
+    console.println(F("PWM IO port expander editor. Type '?' for token help, 'done' to return."));
     bool exitRequested = false;
     while (!exitRequested && !wizardAbortRequested_) {
         renderIoPortExpanderSummary(config);
@@ -1156,7 +1201,152 @@ void editIoPortExpander(Config::RuntimeConfig& config, std::vector<PinWizardBind
     }
 
     if (!wizardAbortRequested_) {
-        console.println(F("Leaving IO port expander editor."));
+        console.println(F("Leaving PWM IO port expander editor."));
+    }
+}
+
+void printPcfTokenHelp(const std::vector<PinWizardBinding>& bindings) {
+    console.println(F("PCF8575-capable tokens:"));
+    for (const auto& binding : bindings) {
+        if (!binding.allowPcf) {
+            continue;
+        }
+        console.printf("  %-12s -> %s\n", binding.token.c_str(), binding.label.c_str());
+    }
+    console.println(F("Use '<token>=pcf#' or '<token> none' to reassign a pin."));
+    console.println(F("Type 'pcf#' (e.g. pcf3) to inspect a specific channel."));
+    console.println(F("Type 'addr' to change the expander I2C address."));
+}
+
+void printPcfChannelDetails(int index, const std::vector<PinWizardBinding>& bindings) {
+    console.printf("PCF%02d assignments:\n", index);
+    bool any = false;
+    for (const auto& binding : bindings) {
+        if (!binding.allowPcf) {
+            continue;
+        }
+        if (Config::pcfIndexFromPin(readBindingValue(binding)) == index) {
+            console.printf("  %-18s [%s]\n", binding.label.c_str(), binding.token.c_str());
+            any = true;
+        }
+    }
+    if (!any) {
+        console.println(F("  (unused)"));
+    }
+}
+
+bool tryHandlePcfTokenEdit(const String& input, std::vector<PinWizardBinding>& bindings) {
+    String trimmed = input;
+    trimmed.trim();
+    if (trimmed.isEmpty()) {
+        return false;
+    }
+    int eq = trimmed.indexOf('=');
+    int space = trimmed.indexOf(' ');
+    int split = -1;
+    if (eq >= 0 && (space < 0 || eq < space)) {
+        split = eq;
+    } else if (space >= 0) {
+        split = space;
+    }
+    if (split <= 0) {
+        return false;
+    }
+    String token = trimmed.substring(0, split);
+    String value = trimmed.substring(split + 1);
+    token.trim();
+    value.trim();
+    if (token.isEmpty() || value.isEmpty()) {
+        console.println(F("Use <token>=pcf# format (e.g. lma_in1=pcf3)."));
+        return true;
+    }
+    token.toLowerCase();
+
+    const PinWizardBinding* binding = findPinWizardBinding(bindings, token);
+    if (!binding) {
+        console.printf("Unknown token '%s'. Type '?' for the token list.\n", token.c_str());
+        return true;
+    }
+    if (!binding->allowPcf) {
+        console.println(F("That token cannot be assigned to the PCF8575 expander."));
+        return true;
+    }
+    int parsed = readBindingValue(*binding);
+    if (!parsePinValue(value, parsed)) {
+        console.println(F("Invalid value. Use GPIO numbers, 'pcf#', or 'none'."));
+        return true;
+    }
+    if (readBindingValue(*binding) == parsed) {
+        console.println(F("Value unchanged."));
+        return true;
+    }
+    writeBindingValue(*binding, parsed);
+    console.printf("%s [%s] = %s\n",
+                   binding->label.c_str(),
+                   binding->token.c_str(),
+                   formatPinValue(parsed).c_str());
+    return true;
+}
+
+void editPcfExpander(Config::RuntimeConfig& config, std::vector<PinWizardBinding>& bindings) {
+    console.println(F("PCF8575 IO expander editor. Type '?' for token help, 'done' to return."));
+    bool exitRequested = false;
+    while (!exitRequested && !wizardAbortRequested_) {
+        renderPcfExpanderSummary(config, bindings);
+        console.print(F("PCF command (? for help, done to exit): "));
+        String line = readLineBlocking();
+        if (wizardAbortRequested_) {
+            break;
+        }
+        line.trim();
+        if (line.isEmpty()) {
+            continue;
+        }
+        String lower = line;
+        lower.toLowerCase();
+
+        if (lower == "done" || lower == "exit" || lower == "back" || lower == "finish") {
+            exitRequested = true;
+            break;
+        }
+        if (lower == "diff") {
+            printSessionPinDiff(bindings);
+            continue;
+        }
+        if (lower == "?" || lower == "help" || lower == "tokens") {
+            printPcfTokenHelp(bindings);
+            continue;
+        }
+        if (lower == "addr" || lower == "address") {
+            editPcfAddress(config.pins);
+            continue;
+        }
+        if (lower.startsWith("pcf")) {
+            String suffix = lower.substring(3);
+            suffix.trim();
+            if (suffix.isEmpty()) {
+                console.println(F("Specify a channel number 0-15 (e.g. pcf4)."));
+                continue;
+            }
+            int idx = suffix.toInt();
+            if (idx >= 0 && idx < 16) {
+                printPcfChannelDetails(idx, bindings);
+            } else {
+                console.println(F("Channel must be between 0 and 15."));
+            }
+            continue;
+        }
+        if (tryHandlePcfTokenEdit(line, bindings)) {
+            continue;
+        }
+        if (tryShowPinBindingValue(line, bindings)) {
+            continue;
+        }
+        console.println(F("Unknown command. Try '<token>=pcf#' or type '?' for help."));
+    }
+
+    if (!wizardAbortRequested_) {
+        console.println(F("Leaving PCF8575 IO expander editor."));
     }
 }
 
@@ -1164,9 +1354,10 @@ void printPinWizardHelp() {
     console.println(F("Pin wizard controls:"));
     console.println(F("  - Type <token>=<value> for quick edits (pcf# for expander pins)."));
     console.println(F("  - Type a token alone to see its current value."));
-    console.println(F("  - Press 1-8 to open the legacy guided forms for grouped settings."));
+    console.println(F("  - Press menu numbers to open grouped editors (1-8)."));
     console.println(F("  - PCA9685 tokens: pca_addr, pca_freq, fl_*/fr_*/rl_*/rr_* for color channels."));
-    console.println(F("  - Option 6 opens the IO port expander; type 'advanced' there for blink settings."));
+    console.println(F("  - Option 6 opens the PWM IO port expander; type 'advanced' there for blink settings."));
+    console.println(F("  - Option 8 opens the PCF8575 IO expander; use 'addr' to change its I2C address."));
     console.println(F("  - 'diff' lists changes relative to when the wizard opened."));
     console.println(F("  - '9' or 'done' finishes and prompts to apply, '0'/'exit' discards changes."));
 }
@@ -1474,8 +1665,8 @@ void runPinWizard() {
         } else if (lower == "7" || lower == "pca") {
             editPcaAddress(temp.lighting);
             sectionHandled = true;
-        } else if (lower == "8" || lower == "pcf") {
-            editPcfAddress(temp.pins);
+        } else if (lower == "8" || lower == "pcf" || lower == "pcf io" || lower == "pcf expander") {
+            editPcfExpander(temp, bindings);
             sectionHandled = true;
         }
 
