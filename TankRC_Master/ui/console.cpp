@@ -91,6 +91,7 @@ bool lastCharWasLf_ = false;
 void processLine(const String& line, ConsoleSource source);
 void beginWizardSession();
 void finishWizardSession();
+void runHelpMenu();
 static void snapshotBaseline() {
     Serial.println(F("[TRACE] snapshotBaseline"));
     if (ctx_.config) {
@@ -217,7 +218,6 @@ String promptString(const String& label, const String& current, size_t maxLen) {
     return line;
 }
 
-<<<<<<< HEAD
 String describeOwnedPin(const Config::OwnedPin& pin) {
     if (pin.owner == Config::PinOwner::IoExpander) {
         return String("IO[") + pin.expanderPin + "]";
@@ -320,9 +320,7 @@ static const HelpEntry kHelpShortcuts[] = {
     {F("? or h"), F("Show the quick reference")},
     {F("pin help"), F("List pin-token names for the 'pin' command")},
 };
-
-=======
->>>>>>> parent of 45be129 (better help ui)
+ 
 void showHelp() {
     console.println();
     console.println(F("=== TankRC Serial Console ==="));
@@ -339,6 +337,61 @@ void showHelp() {
     console.println(F("  defaults (df)   - Restore factory defaults"));
     console.println(F("  reset (rs)      - Clear saved settings from flash"));
     console.println();
+}
+
+void runHelpMenu() {
+    if (wizardActive_) {
+        console.println(F("Another interactive session is already running."));
+        return;
+    }
+
+    beginWizardSession();
+
+    bool exitRequested = false;
+    while (!exitRequested && !wizardAbortRequested_) {
+        console.println();
+        console.println(F("=============================================="));
+        console.println(F("       TankRC Interactive Help Hub"));
+        console.println(F("=============================================="));
+        console.println(F(" 1) Quick commands"));
+        console.println(F(" 2) Setup wizards"));
+        console.println(F(" 3) Maintenance & recovery"));
+        console.println(F(" 4) Full quick reference"));
+        console.println(F(" 0) Exit help"));
+
+        const int choice = promptInt("Choose an option", 0);
+        if (wizardAbortRequested_) {
+            break;
+        }
+        switch (choice) {
+            case 1:
+                printHelpSection(F("Quick Commands"), kHelpQuickCommands);
+                break;
+            case 2:
+                printHelpSection(F("Setup Wizards"), kHelpWizards);
+                break;
+            case 3:
+                printHelpSection(F("Maintenance"), kHelpMaintenance);
+                printHelpSection(F("Help & Tips"), kHelpShortcuts);
+                break;
+            case 4:
+                showHelp();
+                break;
+            case 0:
+                exitRequested = true;
+                console.println(F("Closing help hub."));
+                break;
+            default:
+                console.println(F("Unknown selection. Please choose 0-4."));
+                break;
+        }
+    }
+
+    if (wizardAbortRequested_) {
+        console.println(F("Help hub dismissed."));
+    }
+
+    finishWizardSession();
 }
 
 void showConfig() {
@@ -1157,17 +1210,12 @@ void handleCommand(String line) {
     String lower = line;
     lower.toLowerCase();
 
-<<<<<<< HEAD
     if (lower == "h" || lower == "?" || lower == "quick" || lower == "qr") {
         showHelp();
         return;
     }
     if (lower == "help" || lower == "menu") {
         runHelpMenu();
-=======
-    if (lower == "help" || lower == "menu" || lower == "h" || lower == "?") {
-        showHelp();
->>>>>>> parent of 45be129 (better help ui)
         return;
     }
     if (lower == "show" || lower == "s") {
