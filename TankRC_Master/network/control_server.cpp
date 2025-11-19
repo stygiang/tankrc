@@ -289,7 +289,7 @@ class JsonStream {
     size_t pos_ = 0;
 };
 
-const char CONTROL_PAGE_TEMPLATE[] PROGMEM = R"HTML(R"HTML(<!DOCTYPE html>
+const char CONTROL_PAGE_TEMPLATE[] PROGMEM = R"HTML(<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -303,8 +303,6 @@ const char CONTROL_PAGE_TEMPLATE[] PROGMEM = R"HTML(R"HTML(<!DOCTYPE html>
     --accent-dark:#24b784;
     --text:#f5f7fb;
     --muted:#8a9db7;
-    --warn:#ffb703;
-    --danger:#ff3864;
 }
 * { box-sizing:border-box; }
 body {
@@ -315,22 +313,22 @@ body {
     background:linear-gradient(180deg,#04070f,#0d1321 45%,#0c111b);
 }
 main {
-    max-width:1200px;
-    margin:0 auto 3rem;
-    padding:1rem;
+    max-width:900px;
+    margin:0 auto;
+    padding:1.5rem 1rem 3rem;
 }
 header.hero {
     background:var(--panel);
-    margin:1rem;
     border-radius:18px;
-    padding:1.25rem 2rem;
+    margin:1rem;
+    padding:1.25rem 1.75rem;
     display:flex;
     justify-content:space-between;
     align-items:center;
     gap:1rem;
     box-shadow:0 20px 50px rgba(0,0,0,0.35);
 }
-.hero h1 { margin:0; font-size:1.8rem; }
+.hero h1 { margin:0; font-size:1.9rem; }
 .hero p { margin:0.35rem 0 0; color:var(--muted); }
 .status-tags { display:flex; gap:0.6rem; flex-wrap:wrap; }
 .status-pill {
@@ -354,7 +352,8 @@ header.hero {
     flex-wrap:wrap;
     gap:0.5rem;
 }
-.panel h2 { margin:0; font-size:1.25rem; }
+.panel h2 { margin:0; font-size:1.35rem; }
+.panel p { margin:0; color:var(--muted); }
 .feature-grid {
     margin-top:1rem;
     display:grid;
@@ -372,192 +371,37 @@ header.hero {
 }
 .feature-card strong { display:block; font-size:1.05rem; }
 .feature-card small { color:var(--muted); }
-.feature-card label { display:flex; align-items:center; justify-content:space-between; }
-.feature-card input[type="checkbox"] { transform:scale(1.2); margin-right:0.3rem; }
+.feature-card__actions {
+    display:flex;
+    justify-content:flex-end;
+    gap:0.5rem;
+    margin-top:0.25rem;
+}
+.feature-card__actions button {
+    flex:1;
+    border:none;
+    border-radius:10px;
+    padding:0.45rem 0.6rem;
+    cursor:pointer;
+    font-size:0.9rem;
+    font-weight:600;
+    transition:background 0.2s ease, color 0.2s ease;
+}
+.feature-card__actions button.enable {
+    background:rgba(59,227,164,0.12);
+    color:var(--accent);
+}
+.feature-card__actions button.disable {
+    background:rgba(255,255,255,0.08);
+    color:var(--text);
+}
+.feature-card__actions button:disabled {
+    opacity:0.4;
+    cursor:not-allowed;
+}
 .feature-status { font-size:0.85rem; font-weight:600; letter-spacing:0.04em; }
 .feature-status.enabled { color:var(--accent); }
 .feature-status.disabled { color:#f4f6ff; opacity:0.6; }
-.test-panel ul { margin:0.75rem 0 0; padding-left:1rem; color:var(--muted); }
-.tabs { display:flex; gap:0.5rem; }
-.tabs button {
-    border:none;
-    background:rgba(255,255,255,0.05);
-    color:var(--text);
-    padding:0.45rem 1rem;
-    border-radius:999px;
-    cursor:pointer;
-    transition:background 0.2s ease;
-}
-.tabs button.active { background:var(--accent); color:#021214; }
-.pin-grid {
-    margin-top:1.25rem;
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
-    gap:1rem;
-}
-.pin-card {
-    background:rgba(255,255,255,0.02);
-    border:1px solid rgba(255,255,255,0.07);
-    border-radius:16px;
-    padding:1rem;
-    display:flex;
-    flex-direction:column;
-    gap:0.5rem;
-    position:relative;
-}
-.pin-card__head {
-    display:flex;
-    justify-content:space-between;
-    align-items:flex-start;
-    gap:0.5rem;
-}
-.pin-card__head strong { font-size:1rem; }
-.pin-card__owner { font-size:0.8rem; color:var(--muted); }
-.pin-card__value { font-size:0.9rem; font-weight:600; }
-.pin-card__desc { margin:0; color:var(--muted); font-size:0.85rem; }
-.pin-card__input {
-    display:flex;
-    gap:0.5rem;
-}
-.pin-card__input input {
-    flex:1;
-    background:rgba(255,255,255,0.05);
-    border:1px solid rgba(255,255,255,0.1);
-    border-radius:10px;
-    padding:0.45rem 0.75rem;
-    color:var(--text);
-}
-.pin-card__input input::placeholder { color:rgba(255,255,255,0.4); }
-.pin-card__input button {
-    border:none;
-    background:var(--accent);
-    color:#021214;
-    border-radius:10px;
-    padding:0.4rem 0.9rem;
-    cursor:pointer;
-}
-.pin-card__hint { color:var(--muted); font-size:0.75rem; margin:0; }
-.pin-card__suggestions {
-    display:flex;
-    flex-wrap:wrap;
-    gap:0.55rem;
-    margin:0.75rem 0;
-}
-.pin-card__suggestions button {
-    border:none;
-    border-radius:14px;
-    padding:0.55rem 1.1rem;
-    background:rgba(255,255,255,0.08);
-    color:var(--text);
-    cursor:pointer;
-    font-size:0.95rem;
-    min-width:90px;
-    text-align:center;
-    transition:background 0.2s ease, transform 0.2s ease;
-}
-.pin-card__suggestions button:hover {
-    background:rgba(255,255,255,0.18);
-}
-.pin-card__suggestions button.selected {
-    background:var(--accent);
-    color:#021214;
-    transform:translateY(-1px);
-}
-.pin-card__overlay, .pin-card__board-popup {
-    position:absolute;
-    top:50%;
-    left:50%;
-    transform:translate(-50%,-50%);
-    background:linear-gradient(180deg,rgba(2,7,17,0.97),rgba(5,17,32,0.97));
-    border:1px solid rgba(59,227,164,0.35);
-    border-radius:16px;
-    padding:1.25rem;
-    width:280px;
-    text-align:center;
-    box-shadow:0 25px 55px rgba(0,0,0,0.6);
-    z-index:10;
-}
-.pin-card__overlay.hidden, .pin-card__board-popup.hidden {
-    display:none;
-}
-.pin-card__overlay-buttons {
-    display:flex;
-    justify-content:space-between;
-    gap:0.5rem;
-    margin-top:0.8rem;
-}
-.pin-card__board {
-    margin-top:0.6rem;
-    border:none;
-    background:rgba(255,255,255,0.12);
-    color:var(--text);
-    border-radius:12px;
-    padding:0.55rem 0.9rem;
-    cursor:pointer;
-    transition:background 0.2s ease;
-}
-.pin-card__board:hover {
-    background:rgba(255,255,255,0.18);
-}
-.pin-card__board-popup {
-    display:flex;
-    flex-direction:column;
-    gap:0.65rem;
-}
-.pin-card__board-popup strong {
-    display:block;
-    font-size:1rem;
-    margin-bottom:0.15rem;
-}
-.pin-card__board-popup p {
-    margin:0;
-    color:var(--muted);
-    font-size:0.85rem;
-}
-.pin-card__board-options {
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
-    gap:0.5rem;
-}
-.pin-card__board-option {
-    border:none;
-    border-radius:10px;
-    padding:0.5rem 0.6rem;
-    background:rgba(255,255,255,0.1);
-    color:var(--text);
-    cursor:pointer;
-    min-height:42px;
-}
-.pin-card__board-option:hover {
-    background:rgba(59,227,164,0.2);
-}
-.pin-card--static {
-    background:rgba(59,227,164,0.04);
-    border-color:rgba(59,227,164,0.35);
-}
-.pin-card--static .pin-card__value {
-    color:var(--accent);
-    font-weight:600;
-}
-.pin-card--static.free .pin-card__value {
-    color:var(--muted);
-}
-.pin-card__static-meta {
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:0.35rem;
-    font-size:0.8rem;
-    color:var(--muted);
-}
-.pin-card__static-pill {
-    border-radius:999px;
-    padding:0.2rem 0.9rem;
-    background:rgba(255,255,255,0.09);
-}
-.pin-card__message { min-height:1.25rem; font-size:0.8rem; }
-.pin-card__message.success { color:var(--accent); }
-.pin-card__message.error { color:var(--danger); }
 .toast {
     position:fixed;
     left:50%;
@@ -584,7 +428,7 @@ header.hero {
         <h1>TankRC Control Hub</h1>
         <p>Connect to the "sharc" access point to reach this page from the master tank.</p>
     </div>
-    <div class="status-tags" id="statusList">
+    <div class="status-tags">
         <span class="status-pill" id="statusBadge">Connecting...</span>
     </div>
 </header>
@@ -593,86 +437,28 @@ header.hero {
         <header>
             <div>
                 <h2>Feature toggles</h2>
-                <p style="margin:0; color:var(--muted);">Flip lights, sound, sensors, Wi-Fi, and tip-over protection.</p>
+                <p style="margin:0;">Enable or disable key modules such as lighting, sound, sensors, and Wi-Fi.</p>
             </div>
             <div class="status-pill">AP: sharc</div>
         </header>
         <div class="feature-grid" id="featureGrid"></div>
     </section>
-    <section class="panel test-panel">
-        <header>
-            <div>
-                <h2>Diagnostics & testing</h2>
-                <p style="margin:0; color:var(--muted);">Use the serial console command <code>tests</code> to exercise motors, sound, and battery readings.</p>
-            </div>
-        </header>
-        <ul>
-            <li>Run <strong>Motor sweep</strong> to verify both tracks spin and pivot.</li>
-            <li><strong>Sound pulse</strong> drives the speaker briefly for feedback.</li>
-            <li><strong>Battery read</strong> reports voltage when requested.</li>
-        </ul>
-    </section>
-    <section class="panel">
-        <header>
-            <div>
-                <h2>Pin assignments</h2>
-                <p style="margin:0; color:var(--muted);">Cards show current owners, allowed values, and whether PCA/PCF expanders are supported.</p>
-            </div>
-        <div class="tabs">
-            <button data-board="master" class="active">Master ESP</button>
-            <button data-board="slave">Slave ESP</button>
-            <button data-board="pcf8575">PCF8575 Expander</button>
-            <button data-board="pca9685">PCA9685 PWM</button>
-        </div>
-        </header>
-        <div class="pin-grid" id="pinGrid"></div>
-    </section>
 </main>
 <div class="toast" id="toast"></div>
 <script>
-const pinSchema = __PIN_SCHEMA_JSON__;
 const featureFields = [
-    { key: 'lightingEnabled', label: 'Lighting', description: 'Light bar channels and blink patterns.' },
-    { key: 'soundEnabled', label: 'Sound', description: 'Speaker output and FX engine.' },
-    { key: 'sensorsEnabled', label: 'Sensors', description: 'Ultrasonic and tip sensors.' },
-    { key: 'wifiEnabled', label: 'Wi-Fi', description: 'Enable station/AP networking.' },
-    { key: 'ultrasonicEnabled', label: 'Ultrasonic', description: 'Allow ultrasonic range sensors.' },
-    { key: 'tipOverEnabled', label: 'Tip-over', description: 'Enable tip-over protection routines.' },
+    { key: 'lightingEnabled', stateKey: 'lighting', label: 'Lighting', description: 'Light bar channels and blink patterns.' },
+    { key: 'soundEnabled', stateKey: 'sound', label: 'Sound', description: 'Speaker output and FX engine.' },
+    { key: 'sensorsEnabled', stateKey: 'sensors', label: 'Sensors', description: 'Ultrasonic and tip sensors.' },
+    { key: 'wifiEnabled', stateKey: 'wifi', label: 'Wi-Fi', description: 'Enable station/AP networking.' },
+    { key: 'ultrasonicEnabled', stateKey: 'ultrasonic', label: 'Ultrasonic', description: 'Allow ultrasonic range sensors.' },
+    { key: 'tipOverEnabled', stateKey: 'tip', label: 'Tip-over', description: 'Enable tip-over protection routines.' },
 ];
 let config = null;
-let activeBoard = 'master';
 const featureGrid = document.getElementById('featureGrid');
-const pinGrid = document.getElementById('pinGrid');
 const toast = document.getElementById('toast');
-const boardButtons = document.querySelectorAll('[data-board]');
 const statusBadge = document.getElementById('statusBadge');
 const refreshIntervalMs = 4000;
-const pinInputState = {};
-const boardOverrides = loadBoardOverrides();
-const boardList = Array.from(new Set(pinSchema.map(entry => entry.board)));
-const boardTypeMap = {
-    master: 'schema',
-    slave: 'schema',
-    pcf8575: 'pcf',
-    pca9685: 'pca',
-};
-const suggestionSelections = {};
-const boardPopupState = { token: null };
-let activeInputSnapshot = null;
-const pcaChannelSpecs = [
-    { path: 'lighting.channels.frontLeft.r', label: 'Front-left red', owner: 'Lighting · Front-left', description: 'Red PWM for the front-left headlights.', type: 'RGB component' },
-    { path: 'lighting.channels.frontLeft.g', label: 'Front-left green', owner: 'Lighting · Front-left', description: 'Green PWM for the front-left headlights.', type: 'RGB component' },
-    { path: 'lighting.channels.frontLeft.b', label: 'Front-left blue', owner: 'Lighting · Front-left', description: 'Blue PWM for the front-left headlights.', type: 'RGB component' },
-    { path: 'lighting.channels.frontRight.r', label: 'Front-right red', owner: 'Lighting · Front-right', description: 'Red PWM for the front-right headlights.', type: 'RGB component' },
-    { path: 'lighting.channels.frontRight.g', label: 'Front-right green', owner: 'Lighting · Front-right', description: 'Green PWM for the front-right headlights.', type: 'RGB component' },
-    { path: 'lighting.channels.frontRight.b', label: 'Front-right blue', owner: 'Lighting · Front-right', description: 'Blue PWM for the front-right headlights.', type: 'RGB component' },
-    { path: 'lighting.channels.rearLeft.r', label: 'Rear-left red', owner: 'Lighting · Rear-left', description: 'Red PWM for the rear-left reverse lights.', type: 'RGB component' },
-    { path: 'lighting.channels.rearLeft.g', label: 'Rear-left green', owner: 'Lighting · Rear-left', description: 'Green PWM for the rear-left reverse lights.', type: 'RGB component' },
-    { path: 'lighting.channels.rearLeft.b', label: 'Rear-left blue', owner: 'Lighting · Rear-left', description: 'Blue PWM for the rear-left reverse lights.', type: 'RGB component' },
-    { path: 'lighting.channels.rearRight.r', label: 'Rear-right red', owner: 'Lighting · Rear-right', description: 'Red PWM for the rear-right reverse lights.', type: 'RGB component' },
-    { path: 'lighting.channels.rearRight.g', label: 'Rear-right green', owner: 'Lighting · Rear-right', description: 'Green PWM for the rear-right reverse lights.', type: 'RGB component' },
-    { path: 'lighting.channels.rearRight.b', label: 'Rear-right blue', owner: 'Lighting · Rear-right', description: 'Blue PWM for the rear-right reverse lights.', type: 'RGB component' },
-];
 
 function showToast(message, tone = 'info') {
     toast.textContent = message;
@@ -682,85 +468,23 @@ function showToast(message, tone = 'info') {
     toast.dataset.timeout = setTimeout(() => toast.classList.remove('show'), 2800);
 }
 
-function formatPinValue(value) {
-    if (typeof value !== 'number') {
-        return 'unknown';
-    }
-    if (value <= -2) {
-        return 'pcf' + (-value - 2);
-    }
-    if (value === -1) {
-        return 'unassigned';
-    }
-    return String(value);
-}
-
-function formatPinKey(value) {
-    if (value === undefined || value === null) {
-        return '';
-    }
-    if (typeof value === 'number') {
-        if (value <= -2) {
-            return `pcf${-value - 2}`;
-        }
-        return String(value);
-    }
-    return String(value);
-}
-
-function loadBoardOverrides() {
-    try {
-        const stored = localStorage.getItem('pinBoardOverride');
-        return stored ? JSON.parse(stored) : {};
-    } catch (e) {
-        return {};
-    }
-}
-
-function saveBoardOverrides() {
-    localStorage.setItem('pinBoardOverride', JSON.stringify(boardOverrides));
-}
-
-function getEntryBoard(entry) {
-    return boardOverrides[entry.token] || entry.board;
-}
-
-function gatherAssignedPins() {
-    const map = new Map();
-    for (const entry of pinSchema) {
-        const value = getValueFromPath(entry.path);
-        if (value === null || value === undefined) {
-            continue;
-        }
-        if (value === -1) {
-            continue;
-        }
-        const key = formatPinKey(value);
-        if (!key) {
-            continue;
-        }
-        map.set(key, entry);
-    }
-    return map;
-}
-
-function getValueFromPath(path) {
-    if (!config) {
-        return undefined;
-    }
-    const parts = path.split('.');
-    let cursor = config;
-    for (const part of parts) {
-        if (cursor == null) {
-            return undefined;
-        }
-        if (/^\d+$/.test(part)) {
-            cursor = cursor[Number(part)];
-        } else {
-            cursor = cursor[part];
-        }
-    }
-    return cursor;
+function applyFeatureToggle(field, enabled, statusEl, enableBtn, disableBtn) {
+    enableBtn.disabled = true;
+    disableBtn.disabled = true;
+    const payload = { [field.key]: enabled ? '1' : '0' };
+    postConfig(payload)
+        .then(() => refreshConfig())
+        .then(() => {
+            statusEl.textContent = enabled ? 'Enabled' : 'Disabled';
+            statusEl.classList.toggle('enabled', enabled);
+            statusEl.classList.toggle('disabled', !enabled);
+            showToast(`${field.label} ${enabled ? 'enabled' : 'disabled'}`);
+        })
+        .catch(err => showToast(err.message, 'danger'))
+        .finally(() => {
+            enableBtn.disabled = enabled;
+            disableBtn.disabled = !enabled;
+        });
 }
 
 function renderFeatureToggles() {
@@ -770,379 +494,28 @@ function renderFeatureToggles() {
     }
     featureGrid.innerHTML = '';
     for (const field of featureFields) {
+        const enabled = !!config.features[field.stateKey];
         const card = document.createElement('article');
         card.className = 'feature-card';
         card.innerHTML = `
             <strong>${field.label}</strong>
             <small>${field.description}</small>
-            <label>
-                <span class="feature-status ${config.features[field.key] ? 'enabled' : 'disabled'}">
-                    ${config.features[field.key] ? 'Enabled' : 'Disabled'}
-                </span>
-                <input type="checkbox" data-field="${field.key}" />
-            </label>`;
-        const input = card.querySelector('input');
+            <span class="feature-status ${enabled ? 'enabled' : 'disabled'}">
+                ${enabled ? 'Enabled' : 'Disabled'}
+            </span>
+            <div class="feature-card__actions">
+                <button type="button" class="enable" data-field="${field.key}">Enable</button>
+                <button type="button" class="disable" data-field="${field.key}">Disable</button>
+            </div>`;
         const status = card.querySelector('.feature-status');
-        input.checked = !!config.features[field.key];
-        input.addEventListener('change', () => {
-            postConfig({ [field.key]: input.checked ? '1' : '0' })
-                .then(refreshConfig)
-                .then(() => {
-                    status.textContent = input.checked ? 'Enabled' : 'Disabled';
-                    status.classList.toggle('enabled', input.checked);
-                    status.classList.toggle('disabled', !input.checked);
-                    showToast(`${field.label} ${input.checked ? 'enabled' : 'disabled'}`);
-                })
-                .catch(err => showToast(err.message, 'danger'));
-        });
+        const enableBtn = card.querySelector('button.enable');
+        const disableBtn = card.querySelector('button.disable');
+        enableBtn.disabled = enabled;
+        disableBtn.disabled = !enabled;
+        enableBtn.addEventListener('click', () => applyFeatureToggle(field, true, status, enableBtn, disableBtn));
+        disableBtn.addEventListener('click', () => applyFeatureToggle(field, false, status, enableBtn, disableBtn));
         featureGrid.appendChild(card);
     }
-}
-
-function validatePinValue(entry, raw) {
-    const trimmed = raw.trim().toLowerCase();
-    if (!trimmed) {
-        return { valid: false, message: 'Type a GPIO number, pcf#, or "none".' };
-    }
-    if (trimmed === 'none' || trimmed === 'off') {
-        return { valid: true, value: 'none' };
-    }
-    if (trimmed.startsWith('pcf')) {
-        if (!entry.allowPcf) {
-            return { valid: false, message: 'This signal must stay on a GPIO pin.' };
-        }
-        const idx = Number(trimmed.substring(3).trim());
-        if (!Number.isInteger(idx) || idx < 0 || idx > 15) {
-            return { valid: false, message: 'Use pcf0..pcf15 for expander channels.' };
-        }
-        return { valid: true, value: `pcf${idx}` };
-    }
-    const number = Number(trimmed);
-    if (!Number.isInteger(number)) {
-        return { valid: false, message: 'Use a whole GPIO number or pcf#.' };
-    }
-    if (entry.minValue >= 0 && number < entry.minValue) {
-        return { valid: false, message: `Value must be ≥ ${entry.minValue}.` };
-    }
-    if (entry.maxValue >= 0 && number > entry.maxValue) {
-        return { valid: false, message: `Value must be ≤ ${entry.maxValue}.` };
-    }
-    return { valid: true, value: String(number) };
-}
-
-
-function captureActiveInputState() {
-    const active = document.activeElement;
-    if (active && active.tagName === 'INPUT' && active.dataset.token) {
-        activeInputSnapshot = {
-            token: active.dataset.token,
-            value: active.value,
-            selectionStart: active.selectionStart,
-            selectionEnd: active.selectionEnd,
-        };
-        pinInputState[active.dataset.token] = active.value;
-        return;
-    }
-    activeInputSnapshot = null;
-}
-
-function restoreActiveInputState() {
-    if (!activeInputSnapshot) {
-        return;
-    }
-    const input = pinGrid.querySelector(`input[data-token="${activeInputSnapshot.token}"]`);
-    if (input) {
-        input.value = activeInputSnapshot.value;
-        if (typeof activeInputSnapshot.selectionStart === 'number' && typeof activeInputSnapshot.selectionEnd === 'number') {
-            try {
-                input.setSelectionRange(activeInputSnapshot.selectionStart, activeInputSnapshot.selectionEnd);
-            } catch (err) {
-                // ignore invalid ranges
-            }
-        }
-        input.focus();
-    }
-    activeInputSnapshot = null;
-}
-
-function renderPinCards() {
-    if (!config) {
-        pinGrid.innerHTML = '';
-        return;
-    }
-    const assigned = gatherAssignedPins();
-    captureActiveInputState();
-    const boardType = boardTypeMap[activeBoard] || 'schema';
-    if (boardType === 'pcf') {
-        renderPcfBoard(assigned);
-    } else if (boardType === 'pca') {
-        renderPcaBoard();
-    } else {
-        renderSchemaBoard(assigned);
-    }
-    restoreActiveInputState();
-}
-
-function renderSchemaBoard(assigned) {
-    const entries = pinSchema.filter(entry => getEntryBoard(entry) === activeBoard);
-    pinGrid.innerHTML = entries.map((entry, index) => {
-        const currentValue = formatPinValue(getValueFromPath(entry.path));
-        const hints = [];
-        if (!entry.allowPcf) {
-            hints.push('GPIO-only');
-        }
-        if (entry.hint) {
-            hints.push(entry.hint);
-        }
-        return `
-            <article class="pin-card" data-index="${index}" data-token="${entry.token}">
-                <div class="pin-card__head">
-                    <div>
-                        <strong>${entry.label}</strong>
-                        <div class="pin-card__owner">${entry.owner}</div>
-                    </div>
-                    <div class="pin-card__value">${currentValue}</div>
-                </div>
-                <p class="pin-card__desc">${entry.description}</p>
-                <div class="pin-card__input">
-                    <input type="text" placeholder="GPIO, pcf#, or none" data-token="${entry.token}" value="${pinInputState[entry.token] || ''}" />
-                    <button type="button">Set</button>
-                </div>
-                <div class="pin-card__suggestions" data-token="${entry.token}"></div>
-                <small class="pin-card__hint">${entry.type}${hints.length ? ' • ' + hints.join(' • ') : ''}</small>
-                <div class="pin-card__message" aria-live="polite"></div>
-                <button type="button" class="pin-card__board">Move board</button>
-                <div class="pin-card__overlay hidden">
-                    <p>Pin currently assigned to <span class="overlay-source"></span>. Overwrite?</p>
-                    <div class="pin-card__overlay-buttons">
-                        <button type="button" class="overlay-confirm">Overwrite</button>
-                        <button type="button" class="overlay-cancel">Cancel</button>
-                    </div>
-                </div>
-                <div class="pin-card__board-popup hidden" role="dialog" aria-modal="true">
-                    <strong>Move this pin</strong>
-                    <p>Select the board that should own this signal.</p>
-                    <div class="pin-card__board-options"></div>
-                </div>
-            </article>
-        `;
-    }).join('');
-    pinGrid.querySelectorAll('.pin-card').forEach(card => {
-        const entry = entries[Number(card.dataset.index)];
-        const input = card.querySelector('input');
-        const setButton = card.querySelector('.pin-card__input button');
-        const message = card.querySelector('.pin-card__message');
-        const suggestions = card.querySelector('.pin-card__suggestions');
-        const overlay = card.querySelector('.pin-card__overlay');
-        const overlaySource = overlay.querySelector('.overlay-source');
-        const overlayConfirm = overlay.querySelector('.overlay-confirm');
-        const overlayCancel = overlay.querySelector('.overlay-cancel');
-        const boardBtn = card.querySelector('.pin-card__board');
-        const boardPopup = card.querySelector('.pin-card__board-popup');
-        const boardOptions = boardPopup.querySelector('.pin-card__board-options');
-        updateSuggestions(entry, suggestions, assigned);
-        bindSuggestionHandlers(entry, suggestions, input, message, overlay, overlaySource, assigned);
-        input.addEventListener('input', () => {
-            pinInputState[entry.token] = input.value;
-            suggestionSelections[entry.token] = null;
-            updateSuggestions(entry, suggestions, assigned);
-            bindSuggestionHandlers(entry, suggestions, input, message, overlay, overlaySource, assigned);
-        });
-        setButton.addEventListener('click', () => handleSetRequest(entry, input, message, assigned, overlay, overlaySource));
-        overlayConfirm.addEventListener('click', () => {
-            overlay.classList.add('hidden');
-            handleSetRequest(entry, input, message, assigned, null, null, true);
-        });
-        overlayCancel.addEventListener('click', () => overlay.classList.add('hidden'));
-        const targetBoards = boardList.filter(board => board !== getEntryBoard(entry));
-        boardOptions.innerHTML = targetBoards.length
-            ? targetBoards.map(board => `<button type="button" class="pin-card__board-option" data-board="${board}">${board}</button>`).join('')
-            : '<span style="font-size:0.85rem;color:var(--muted);">No alternative boards</span>';
-        boardOptions.querySelectorAll('.pin-card__board-option').forEach(opt => {
-            opt.addEventListener('click', () => {
-                boardOverrides[entry.token] = opt.dataset.board;
-                saveBoardOverrides();
-                boardPopupState.token = null;
-                boardPopup.classList.add('hidden');
-                renderPinCards();
-            });
-        });
-        const isPopupOpen = boardPopupState.token === entry.token;
-        boardPopup.classList.toggle('hidden', !isPopupOpen);
-        boardPopup.addEventListener('click', event => event.stopPropagation());
-        boardBtn.addEventListener('click', event => {
-            event.stopPropagation();
-            const isOpen = !boardPopup.classList.contains('hidden');
-            if (isOpen) {
-                boardPopupState.token = null;
-                boardPopup.classList.add('hidden');
-                return;
-            }
-            boardPopupState.token = entry.token;
-            boardPopup.classList.remove('hidden');
-        });
-    });
-}
-
-function renderPcfBoard(assigned) {
-    const cards = [];
-    for (let idx = 0; idx < 16; idx++) {
-        const key = `pcf${idx}`;
-        const occupant = assigned.get(key);
-        const owner = occupant ? occupant.owner : 'Available channel';
-        const description = occupant ? occupant.description : 'This expander pin is free to claim.';
-        const valueLabel = occupant ? occupant.label : `pcf${idx}`;
-        const hint = occupant ? occupant.type : 'PCF8575 I/O';
-        const extraClass = occupant ? '' : ' free';
-        cards.push(`
-            <article class="pin-card pin-card--static${extraClass}">
-                <div class="pin-card__head">
-                    <div>
-                        <strong>PCF8575 I/O ${idx}</strong>
-                        <div class="pin-card__owner">${owner}</div>
-                    </div>
-                    <div class="pin-card__value">${valueLabel}</div>
-                </div>
-                <p class="pin-card__desc">${description}</p>
-                <div class="pin-card__static-meta">
-                    <span>${hint}</span>
-                    <span class="pin-card__static-pill">${occupant ? 'Assigned' : 'Open'}</span>
-                </div>
-            </article>
-        `);
-    }
-    pinGrid.innerHTML = cards.join('');
-}
-
-function renderPcaBoard() {
-    const channelMap = new Map();
-    for (const spec of pcaChannelSpecs) {
-        const value = getValueFromPath(spec.path);
-        if (typeof value === 'number' && value >= 0 && value < 16) {
-            channelMap.set(value, spec);
-        }
-    }
-    const cards = [];
-    for (let channel = 0; channel < 16; channel++) {
-        const spec = channelMap.get(channel);
-        const owner = spec ? spec.owner : 'Available channel';
-        const description = spec ? spec.description : 'No configuration is using this channel.';
-        const label = spec ? spec.label : `Channel ${channel}`;
-        const extraClass = spec ? '' : ' free';
-        cards.push(`
-            <article class="pin-card pin-card--static${extraClass}">
-                <div class="pin-card__head">
-                    <div>
-                        <strong>PCA9685 Channel ${channel}</strong>
-                        <div class="pin-card__owner">${owner}</div>
-                    </div>
-                    <div class="pin-card__value">${label}</div>
-                </div>
-                <p class="pin-card__desc">${description}</p>
-                <div class="pin-card__static-meta">
-                    <span>${spec ? spec.type : 'Unassigned'}</span>
-                    <span class="pin-card__static-pill">Slot ${channel}</span>
-                </div>
-            </article>
-        `);
-    }
-    pinGrid.innerHTML = cards.join('');
-}
-
-function updateSuggestions(entry, container, assignedMap) {
-    const options = computeFreePins(entry, assignedMap);
-    if (!options.length) {
-        container.innerHTML = '';
-        return;
-    }
-    container.innerHTML = options.map(value => `<button type="button" data-value="${value}">${value}</button>`).join('');
-}
-
-function bindSuggestionHandlers(entry, container, input, message, overlay, overlaySource, assignedMap) {
-    container.querySelectorAll('button').forEach(button => {
-        const value = button.dataset.value;
-        button.classList.toggle('selected', suggestionSelections[entry.token] === value);
-        button.addEventListener('click', event => {
-            event.stopPropagation();
-            const currentlySelected = suggestionSelections[entry.token];
-            if (currentlySelected === value) {
-                suggestionSelections[entry.token] = null;
-                container.querySelectorAll('button').forEach(btn => btn.classList.remove('selected'));
-                handleSetRequest(entry, input, message, assignedMap, overlay, overlaySource, false, value);
-            } else {
-                suggestionSelections[entry.token] = value;
-                container.querySelectorAll('button').forEach(btn => btn.classList.toggle('selected', btn === button));
-                if (message) {
-                    message.textContent = `Click again to assign ${value}.`;
-                    message.className = 'pin-card__message';
-                }
-            }
-        });
-    });
-}
-
-function computeFreePins(entry, assignedMap) {
-    const used = new Set();
-    assignedMap.forEach((assignedEntry, key) => {
-        if (assignedEntry.token !== entry.token) {
-            used.add(key);
-        }
-    });
-    const options = [];
-    const start = Math.max(0, entry.minValue >= 0 ? entry.minValue : 0);
-    const end = entry.maxValue >= 0 ? entry.maxValue : 39;
-    for (let pin = start; pin <= end && options.length < 5; pin++) {
-        const key = String(pin);
-        if (!used.has(key)) {
-            options.push(key);
-        }
-    }
-    if (entry.allowPcf) {
-        for (let idx = 0; idx < 16 && options.length < 5; idx++) {
-            const key = `pcf${idx}`;
-            if (!used.has(key)) {
-                options.push(key);
-            }
-        }
-    }
-    return options;
-}
-
-function handleSetRequest(entry, input, message, assignedMap, overlay, overlaySource, forced = false, overrideValue = null) {
-    const rawValue = overrideValue !== null ? overrideValue : input.value;
-    const result = validatePinValue(entry, rawValue);
-    if (!result.valid) {
-        message.textContent = result.message;
-        message.className = 'pin-card__message error';
-        return;
-    }
-    const freshAssigned = gatherAssignedPins();
-    const conflict = freshAssigned.get(result.value);
-    if (conflict && conflict.token !== entry.token && overlay && !forced) {
-        overlaySource.textContent = conflict.label;
-        overlay.classList.remove('hidden');
-        return;
-    }
-    applyPinChange(entry, input, message, result.value);
-}
-
-function applyPinChange(entry, input, message, value) {
-    message.textContent = 'Saving…';
-    message.className = 'pin-card__message';
-    const payload = { [entry.token]: value };
-    postConfig(payload)
-        .then(() => refreshConfig())
-        .then(() => {
-            message.textContent = 'Updated';
-            message.className = 'pin-card__message success';
-            suggestionSelections[entry.token] = null;
-            input.value = '';
-            pinInputState[entry.token] = '';
-        })
-        .catch(err => {
-            message.textContent = err.message;
-            message.className = 'pin-card__message error';
-        });
 }
 
 async function fetchJson(path) {
@@ -1156,7 +529,6 @@ async function fetchJson(path) {
 async function refreshConfig() {
     config = await fetchJson('/api/config');
     renderFeatureToggles();
-    renderPinCards();
 }
 
 async function refreshStatus() {
@@ -1180,28 +552,7 @@ async function postConfig(payload) {
     }
 }
 
-function setActiveBoard(board) {
-    activeBoard = board;
-    boardPopupState.token = null;
-    boardButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.board === board));
-    renderPinCards();
-}
-
 document.addEventListener('DOMContentLoaded', () => {
-    boardButtons.forEach(button => {
-        button.addEventListener('click', () => setActiveBoard(button.dataset.board));
-    });
-    document.addEventListener('click', event => {
-        if (boardPopupState.token &&
-            !event.target.closest('.pin-card__board-popup') &&
-            !event.target.closest('.pin-card__board')) {
-            const openPopup = pinGrid.querySelector('.pin-card__board-popup:not(.hidden)');
-            if (openPopup) {
-                openPopup.classList.add('hidden');
-            }
-            boardPopupState.token = null;
-        }
-    });
     Promise.all([refreshConfig(), refreshStatus()])
         .catch(err => showToast(err.message, 'danger'));
     setInterval(() => {
@@ -1210,9 +561,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }, refreshIntervalMs);
 });
 </script>
- </body>
- </html>
+</body>
+</html>
 )HTML";
+
 
 String modeToString(Comms::RcStatusMode mode) {
     switch (mode) {
@@ -1383,7 +735,6 @@ void ControlServer::notifyConfigApplied() {
 
 void ControlServer::handleRoot() {
     String page = CONTROL_PAGE_TEMPLATE;
-    page.replace("__PIN_SCHEMA_JSON__", buildPinSchemaJson());
     server_.send(200, "text/html", page);
 }
 

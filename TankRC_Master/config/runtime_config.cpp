@@ -4,7 +4,7 @@
 #include <cstring>
 #include <iterator>
 
-#include "config/pins.h"
+#include "config/hardware_map.h"
 
 namespace TankRC::Config {
 RuntimeConfig makeDefaultConfig() {

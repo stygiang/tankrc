@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <cstring>
 
+#include "config/pins.h"
 #include "control/drive_controller.h"
 
 namespace TankRC::Comms {
@@ -18,8 +19,8 @@ void SlaveEndpoint::begin(Config::RuntimeConfig* config,
     drive_ = drive;
     serial_ = serial ? serial : &Serial1;
     if (serial_) {
-        rxPin_ = config_->pins.slaveRx;
-        txPin_ = config_->pins.slaveTx;
+        rxPin_ = Pins::SLAVE_UART_RX;
+        txPin_ = Pins::SLAVE_UART_TX;
         if (rxPin_ >= 0 && txPin_ >= 0) {
             serial_->begin(921600, SERIAL_8N1, rxPin_, txPin_);
         } else {
@@ -124,12 +125,15 @@ void SlaveEndpoint::handleConfig(const SlaveProtocol::ConfigPayload& payload) {
     config_->pins = payload.pins;
     config_->features = payload.features;
     config_->lighting = payload.lighting;
+    // The slave board uses its own UART pins; overwrite any host-provided values.
+    config_->pins.slaveRx = Pins::SLAVE_UART_RX;
+    config_->pins.slaveTx = Pins::SLAVE_UART_TX;
     if (serial_) {
-        const bool pinsChanged = (payload.pins.slaveRx != rxPin_) || (payload.pins.slaveTx != txPin_);
+        const bool pinsChanged = (rxPin_ != Pins::SLAVE_UART_RX) || (txPin_ != Pins::SLAVE_UART_TX);
         if (pinsChanged) {
             serial_->end();
-            rxPin_ = payload.pins.slaveRx;
-            txPin_ = payload.pins.slaveTx;
+            rxPin_ = Pins::SLAVE_UART_RX;
+            txPin_ = Pins::SLAVE_UART_TX;
             if (rxPin_ >= 0 && txPin_ >= 0) {
                 serial_->begin(921600, SERIAL_8N1, rxPin_, txPin_);
             } else {

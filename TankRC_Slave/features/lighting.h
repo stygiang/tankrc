@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <Wire.h>
 
 #include "comms/drive_types.h"
 #include "config/runtime_config.h"
@@ -26,7 +27,7 @@ struct LightingInput {
 
 class Lighting {
   public:
-    void begin(const Config::RuntimeConfig& config);
+    void begin(const Config::RuntimeConfig& config, TwoWire* bus = nullptr);
     void setFeatureEnabled(bool enabled);
     void update(const LightingInput& input);
 

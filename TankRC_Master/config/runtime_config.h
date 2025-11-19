@@ -7,7 +7,7 @@
 #include "config/features.h"
 
 namespace TankRC::Config {
-constexpr std::uint32_t kConfigVersion = 9;
+constexpr std::uint32_t kConfigVersion = 10;
 
 struct ChannelPins {
     int pwm = -1;

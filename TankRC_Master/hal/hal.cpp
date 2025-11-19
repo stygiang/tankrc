@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#include "config/pins.h"
+#include "config/hardware_map.h"
 
 namespace TankRC::Hal {
 namespace {

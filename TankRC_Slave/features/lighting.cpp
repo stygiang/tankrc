@@ -47,9 +47,9 @@ Color makeColor(std::uint8_t r, std::uint8_t g, std::uint8_t b) {
 }
 }  // namespace
 
-void Lighting::begin(const Config::RuntimeConfig& config) {
+void Lighting::begin(const Config::RuntimeConfig& config, TwoWire* bus) {
     config_ = config.lighting;
-    ready_ = pca_.begin(config_.pcaAddress, config_.pwmFrequency);
+    ready_ = pca_.begin(config_.pcaAddress, config_.pwmFrequency, bus);
     if (ready_) {
         setAllLights(Color{0, 0, 0});
     }

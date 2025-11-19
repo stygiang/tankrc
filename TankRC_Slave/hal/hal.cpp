@@ -1,8 +1,10 @@
 #include "hal/hal.h"
 
 #include <Arduino.h>
+#include <Wire.h>
 
 #include "config/features.h"
+#include "config/pins.h"
 #include "config/settings.h"
 #include "drivers/battery_monitor.h"
 #include "drivers/motor_driver.h"
@@ -25,11 +27,26 @@ int currentExpanderAddress = 0x20;
 #if FEATURE_LIGHTS
 bool lightingReady = false;
 #endif
+
+TwoWire expanderWire(1);
+TwoWire* pcfBus = &expanderWire;
+TwoWire* pcaBus = &Wire;
+bool i2cReady = false;
 }  // namespace
 
 namespace {
 Drivers::ChannelPins makeChannel(const Config::ChannelPins& pins) {
     return Drivers::ChannelPins{pins.pwm, pins.in1, pins.in2};
+}
+
+void ensureI2cBuses() {
+    if (i2cReady) {
+        return;
+    }
+    // PCF8575 on I2C bus 1, PCA9685 on I2C bus 0 (pins defined in config/pins.h)
+    pcfBus->begin(Pins::PCF_SDA, Pins::PCF_SCL);
+    pcaBus->begin(Pins::PCA_SDA, Pins::PCA_SCL);
+    i2cReady = true;
 }
 
 bool driverUsesExpander(const Config::DriverPins& pins) {
@@ -45,9 +62,10 @@ void ensureExpander(const Config::RuntimeConfig& config) {
         expanderReady = false;
         return;
     }
+    ensureI2cBuses();
     if (!expanderReady || currentExpanderAddress != config.pins.pcfAddress) {
         currentExpanderAddress = config.pins.pcfAddress;
-        expanderReady = pinExpander.begin(static_cast<std::uint8_t>(config.pins.pcfAddress));
+        expanderReady = pinExpander.begin(static_cast<std::uint8_t>(config.pins.pcfAddress), pcfBus);
     }
 }
 
@@ -71,7 +89,8 @@ void configureBattery(const Config::RuntimeConfig& config) {
 
 void configureLighting(const Config::RuntimeConfig& config) {
 #if FEATURE_LIGHTS
-    lighting.begin(config);
+    ensureI2cBuses();
+    lighting.begin(config, pcaBus);
     lightingReady = true;
 #else
     (void)config;

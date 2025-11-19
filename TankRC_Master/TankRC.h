@@ -1,6 +1,6 @@
 #pragma once
 
-#include "config/pins.h"
+#include "config/hardware_map.h"
 #include "config/runtime_config.h"
 #include "config/settings.h"
 #include "core/system_init.h"
